@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kasir</title>
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/pos.css">
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="brand" id="brand"></div>
+    <div class="grow"></div>
+    <span class="muted">Kasir: <b id="who"></b></span>
+    <span class="sep"></span>
+    <span class="mono" id="clock"></span>
+    <span class="sep"></span>
+    <span id="net" class="tag green">online</span>
+    <a id="adminLink" class="hidden" href="/admin.html"><button class="sm">Admin</button></a>
+    <button class="sm" id="logout">Keluar</button>
+  </header>
+
+  <main class="main">
+    <section class="left">
+      <div class="scan">
+        <label for="q">Kode / barcode / nama barang</label>
+        <div class="scanrow">
+          <input id="q" autocomplete="off" spellcheck="false" placeholder="Scan atau ketik, lalu Enter">
+          <button class="sm" id="cam" title="Scan dengan kamera (Ctrl+K)">Kamera</button><span id="pend" class="tag yellow hidden"></span>
+        </div>
+        <div class="hint">Enter tambah &middot; <kbd>3*</kbd>kode = qty 3 &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> pilih &middot; <kbd>+</kbd><kbd>-</kbd> ubah qty &middot; <kbd>Del</kbd> hapus baris</div>
+        <div id="results" class="results hidden"></div>
+      </div>
+      <div class="cartwrap">
+        <table id="cart" class="cart">
+          <thead><tr><th class="no">No</th><th class="kode">Kode</th><th>Nama Barang</th><th class="r qty">Qty</th><th class="sat">Sat</th><th class="r hrg">Harga</th><th class="r dsc">Disc</th><th class="r jml">Jumlah</th></tr></thead>
+          <tbody id="lines"></tbody>
+        </table>
+        <div id="empty" class="empty">Keranjang kosong. Scan barcode atau ketik nama barang.</div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <div class="total">
+        <div class="lbl">TOTAL</div>
+        <div class="amt mono" id="total">0</div>
+      </div>
+      <dl class="sum">
+        <div><dt>Jumlah item</dt><dd id="s-items">0</dd></div>
+        <div><dt>Subtotal</dt><dd id="s-sub">0</dd></div>
+        <div><dt>Diskon</dt><dd id="s-disc">0</dd></div>
+        <div id="taxrow"><dt id="taxlbl">Pajak</dt><dd id="s-tax">0</dd></div>
+      </dl>
+      <div class="box"><span class="muted">Pelanggan</span><b id="cust">Umum</b></div>
+      <div class="box" id="lastbox"><span class="muted">Transaksi terakhir</span><b id="last">-</b></div>
+      <div class="box"><span class="muted">Ditahan</span><b id="heldc">0</b></div>
+      <button class="pay" id="paybtn">BAYAR <kbd>F12</kbd></button>
+    </aside>
+  </main>
+
+  <footer class="fkeys" id="fkeys">
+    <button data-k="F1"><kbd>F1</kbd>Bantuan</button>
+    <button data-k="F2"><kbd>F2</kbd>Cari</button>
+    <button data-k="F3"><kbd>F3</kbd>Qty</button>
+    <button data-k="F4"><kbd>F4</kbd>Pelanggan</button>
+    <button data-k="F5"><kbd>F5</kbd>Tahan</button>
+    <button data-k="F6"><kbd>F6</kbd>Panggil</button>
+    <button data-k="F7"><kbd>F7</kbd>Disc Baris</button>
+    <button data-k="F8"><kbd>F8</kbd>Disc Total</button>
+    <button data-k="F9"><kbd>F9</kbd>Riwayat</button>
+    <button data-k="F10"><kbd>F10</kbd>Laci</button>
+    <button data-k="Ctrl+P"><kbd>Ctrl+P</kbd>Printer</button>
+  </footer>
+</div>
+<script src="/js/common.js"></script>
+<script src="/js/pos.js"></script>
+</body>
+</html>

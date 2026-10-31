@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk</title>
+<link rel="stylesheet" href="/css/base.css">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+  .box { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 32px 28px; }
+  .brand { text-align: center; margin-bottom: 26px; }
+  .brand img { max-height: 56px; max-width: 160px; margin-bottom: 10px; filter: grayscale(.2); }
+  .brand h1 { font-size: 28px; }
+  .brand p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .row { margin-bottom: 14px; }
+  button.primary { width: 100%; padding: 9px; margin-top: 6px; }
+  .err { color: var(--red); background: var(--red-bg); border-radius: 5px; padding: 7px 10px; font-size: 13px; margin-bottom: 12px; }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<form class="box" id="f" autocomplete="on">
+  <div class="brand"><div id="logo"></div><h1 id="name">Masuk</h1><p id="tag">Sistem kasir dan stok</p></div>
+  <div id="err" class="err hidden"></div>
+  <div class="row"><label class="f" for="u">Username</label><input id="u" name="username" autocomplete="username" autofocus required></div>
+  <div class="row"><label class="f" for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+  <button class="primary" id="go">Masuk <kbd style="color:#111">Enter</kbd></button>
+  <div class="hint">Kasir langsung masuk ke layar kasir. Owner masuk ke panel admin.</div>
+</form>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  const { $ } = POS;
+  try { const me = await POS.get('/api/auth/me'); location.replace(me.role === 'owner' ? '/admin.html' : '/pos.html'); return; } catch (_) {}
+  try {
+    const s = await fetch('/api/settings/public').then((r) => r.json());
+    $('#name').textContent = s.store_name; document.title = 'Masuk - ' + s.store_name;
+    if (s.store_tagline) $('#tag').textContent = s.store_tagline;
+    if (s.has_logo) $('#logo').innerHTML = '<img src="/api/settings/logo" alt="">';
+  } catch (_) {}
+  $('#f').addEventListener('submit', async (e) => {
+    e.preventDefault(); $('#err').classList.add('hidden'); $('#go').disabled = true;
+    try {
+      const me = await POS.post('/api/auth/login', { username: $('#u').value, password: $('#p').value });
+      location.href = me.role === 'owner' ? '/admin.html' : '/pos.html';
+    } catch (er) { $('#err').textContent = er.message; $('#err').classList.remove('hidden'); $('#p').select(); }
+    $('#go').disabled = false;
+  });
+})();
+</script>
+</body>
+</html>

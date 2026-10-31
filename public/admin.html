@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin</title>
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="brand" id="brand"></div>
+    <nav id="nav">
+      <a href="#/dashboard">Dashboard</a>
+      <div class="grp">Transaksi</div>
+      <a href="#/sales">Penjualan</a>
+      <a href="#/purchases">Pembelian</a>
+      <a href="#/receipts">Penerimaan</a>
+      <a href="#/opnames">Stok Opname</a>
+      <div class="grp">Data</div>
+      <a href="#/products">Barang</a>
+      <a href="#/categories">Kategori</a>
+      <a href="#/suppliers">Pemasok</a>
+      <a href="#/customers">Pelanggan</a>
+      <div class="grp">Laporan</div>
+      <a href="#/stockcard">Kartu Stok</a>
+      <a href="#/reports">Laporan &amp; Excel</a>
+      <div class="grp">Sistem</div>
+      <a href="#/users">Pengguna</a>
+      <a href="#/settings">Identitas &amp; Pengaturan</a>
+    </nav>
+    <div class="me">
+      <div><b id="meName"></b><div class="muted" id="meRole"></div></div>
+      <div class="meb"><a href="/pos.html"><button class="sm primary">Buka Kasir</button></a> <button class="sm" id="pw">Password</button> <button class="sm" id="out">Keluar</button></div>
+    </div>
+  </aside>
+  <main class="content">
+    <button class="menu ghost" id="menu">Menu</button>
+    <div id="view"></div>
+  </main>
+</div>
+<script src="/js/common.js"></script>
+<script src="/js/admin-core.js"></script>
+<script src="/js/admin-data.js"></script>
+<script src="/js/admin-trx.js"></script>
+</body>
+</html>
