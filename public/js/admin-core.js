@@ -25,7 +25,8 @@
     const old = $('#view'); const v = old.cloneNode(false); old.replaceWith(v); document.onkeydown = null;
     v.innerHTML = '<div class="empty">Memuat...</div>';
     document.title = (r.title || 'Admin') + ' - ' + (A.ST ? A.ST.store_name : '');
-    try { await r.render(v, rest); } catch (e) { v.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+    POS.progress.start();
+    try { await r.render(v, rest); } catch (e) { v.innerHTML = `<div class="err">${esc(e.message)}</div>`; } finally { POS.progress.done(); }
   }
   window.addEventListener('hashchange', go);
 
@@ -77,7 +78,7 @@
     });
     return m.done;
   };
-  A.dialog = (title, body, { wide = true, footer = '<button class="primary" data-x autofocus>Tutup <kbd style="color:#111">Esc</kbd></button>', hint } = {}) => {
+  A.dialog = (title, body, { wide = true, footer = '<button class="primary" data-x autofocus>Tutup <kbd>Esc</kbd></button>', hint } = {}) => {
     const m = POS.modal({ title, body, footer, wide, hint });
     m.el.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) m.close(); });
     return m;

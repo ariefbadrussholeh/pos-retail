@@ -5,10 +5,36 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   Object.assign(POS, { $, $$ });
 
+  // ---------- Bar progres ----------
+  // POS.progress.start()/done() bisa dipanggil bertumpuk; bar tampil selama ada pekerjaan berjalan.
+  const PG = (POS.progress = { n: 0, w: 0, t: null, el: null });
+  const bar = () => { if (!PG.el) { PG.el = document.createElement('div'); PG.el.id = 'topbar'; PG.el.innerHTML = '<i></i>'; document.body.appendChild(PG.el); } return PG.el; };
+  const setW = (w) => { PG.w = w; const e = bar(); e.firstChild.style.width = w + '%'; };
+  PG.start = () => {
+    if (PG.n++ > 0) return;
+    const e = bar(); clearTimeout(PG.hide); e.classList.add('on'); setW(8);
+    clearInterval(PG.t); PG.t = setInterval(() => setW(PG.w + (92 - PG.w) * 0.12), 200); // merayap mendekati 92%
+  };
+  PG.done = () => {
+    if (PG.n === 0 || --PG.n > 0) return;
+    clearInterval(PG.t); setW(100);
+    PG.hide = setTimeout(() => { bar().classList.remove('on'); setTimeout(() => { if (!PG.n) setW(0); }, 300); }, 220);
+  };
+  PG.wrap = async (f) => { PG.start(); try { return await f(); } finally { PG.done(); } };
+  // Pindah halaman penuh (login, kasir <-> admin): tampilkan bar sampai halaman baru muncul
+  window.addEventListener('beforeunload', () => { try { PG.start(); } catch (e) {} });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) { PG.n = 1; PG.done(); } });
+
+  const slot = document.getElementById('themeSlot'); if (slot && window.Theme) Theme.mount(slot);
+
   // ---------- API ----------
   POS.api = async function (method, url, body) {
-    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
-    const j = await r.json().catch(() => ({}));
+    PG.start();
+    let r, j;
+    try {
+      r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+      j = await r.json().catch(() => ({}));
+    } finally { PG.done(); }
     if (r.status === 401 && !url.startsWith('/api/auth/login') && !['/', '/index.html'].includes(location.pathname)) { location.href = '/'; throw new Error('Sesi berakhir'); }
     if (!r.ok) { const e = new Error(j.error || 'Terjadi kesalahan'); e.details = j.details; e.status = r.status; throw e; }
     return j;

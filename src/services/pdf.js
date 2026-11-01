@@ -1,5 +1,8 @@
 // Dokumen PDF A4: Invoice, Surat Jalan, Permohonan Pembayaran (penjualan & pembelian).
 const PDFDocument = require('pdfkit');
+const path = require('path');
+// Font ditanam (TTF) supaya tidak bergantung pada standard-fonts pdfkit yang tidak ikut ter-bundle di Vercel
+const F = (n) => path.join(__dirname, '../../fonts', n);
 
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const rp = (n) => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
@@ -218,7 +221,10 @@ function paymentRequest(doc, s, d) {
 
 const KINDS = { invoice, delivery, 'payment-request': paymentRequest };
 function render(kind, s, logo, d) {
-  const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true, info: { Title: `${kind} ${d.no}`, Author: s.store_name } });
+  const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true, font: F('Regular.ttf'), info: { Title: `${kind} ${d.no}`, Author: s.store_name } });
+  doc.registerFont('Helvetica', F('Regular.ttf'));
+  doc.registerFont('Helvetica-Bold', F('Bold.ttf'));
+  doc.registerFont('Helvetica-Oblique', F('Italic.ttf'));
   letterhead(doc, s, logo);
   d.docTitle = { invoice: 'Invoice', delivery: 'Surat Jalan', 'payment-request': 'Permohonan Pembayaran' }[kind];
   KINDS[kind](doc, s, d);

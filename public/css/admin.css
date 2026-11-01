@@ -1,10 +1,10 @@
 .shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
-.side { background: #fbfbfa; border-right: 1px solid var(--line); padding: 22px 14px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
+.side { background: var(--side); border-right: 1px solid var(--line); padding: 22px 14px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
 .side .brand { font-family: var(--serif); font-size: 20px; letter-spacing: -.02em; color: var(--ink); padding: 0 8px 18px; display: flex; align-items: center; gap: 8px; line-height: 1.15; }
 .brand-logo { max-height: 30px; max-width: 60px; }
 #nav { flex: 1; }
 #nav a { display: block; padding: 6px 10px; border-radius: 5px; text-decoration: none; color: var(--ink-2); font-size: 13.5px; }
-#nav a:hover { background: var(--hover); } #nav a.on { background: var(--ink); color: #fff; }
+#nav a:hover { background: var(--hover); } #nav a.on { background: var(--ink); color: var(--bg); }
 .grp { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 16px 10px 4px; }
 .me { border-top: 1px solid var(--line); padding: 12px 8px 0; font-size: 13px; } .meb { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 .content { padding: 36px 44px 60px; max-width: 1320px; width: 100%; }
@@ -27,7 +27,7 @@
 .two { grid-template-columns: 1.6fr 1fr; margin-top: 14px; } .three { grid-template-columns: 1fr 1fr 1fr; margin-top: 14px; }
 .chart { display: flex; align-items: flex-end; gap: 10px; height: 170px; padding-top: 10px; }
 .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 6px; }
-.chart .b { width: 100%; background: #d9d7d1; border-radius: 3px 3px 0 0; min-height: 2px; } .chart .col.today .b { background: var(--ink); }
+.chart .b { width: 100%; background: var(--bar); border-radius: 3px 3px 0 0; min-height: 2px; } .chart .col.today .b { background: var(--ink); }
 .chart .l { font-size: 11px; color: var(--muted); } .chart .n { font-size: 10.5px; color: var(--ink-2); font-family: var(--mono); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; } .form-grid .span2 { grid-column: 1 / -1; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 3px; }

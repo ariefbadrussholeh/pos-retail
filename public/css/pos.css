@@ -18,7 +18,7 @@ html, body { overflow: hidden; }
 .results table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .results td { padding: 5px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .results td.n { white-space: normal; width: 100%; }
-.results tr.sel { background: var(--yellow-bg); box-shadow: inset 3px 0 0 var(--ink); }
+.results tr.sel { background: var(--sel); box-shadow: inset 3px 0 0 var(--ink); }
 .results .none { padding: 12px; color: var(--muted); }
 .neg { color: var(--red); }
 
@@ -30,7 +30,7 @@ table.cart { width: 100%; border-collapse: collapse; font-size: 16px; }
 .cart td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .cart .no { width: 40px; color: var(--muted); } .cart .kode { width: 130px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
 .cart .qty { width: 90px; } .cart .sat { width: 56px; color: var(--muted); } .cart .hrg { width: 110px; } .cart .dsc { width: 90px; } .cart .jml { width: 130px; font-weight: 600; }
-.cart tr.sel td { background: var(--yellow-bg); }
+.cart tr.sel td { background: var(--sel); }
 .cart tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--ink); }
 .empty { position: absolute; inset: 40px 0 0 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
 
@@ -44,8 +44,8 @@ table.cart { width: 100%; border-collapse: collapse; font-size: 16px; }
 .sum dt { color: var(--muted); } .sum dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 .box { background: var(--surface); border: 1px solid var(--line-strong); padding: 6px 12px; border-radius: 3px; display: flex; flex-direction: column; font-size: 13px; }
 .box b { font-size: 14px; color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-button.pay { margin-top: auto; background: var(--ink); color: #fff; border: 0; border-radius: 3px; padding: 18px; font-size: 22px; letter-spacing: .08em; }
-button.pay:hover { background: #333; } button.pay kbd { color: #111; margin-left: 6px; vertical-align: middle; }
+button.pay { margin-top: auto; background: var(--btn); color: var(--on-btn); border: 0; border-radius: 3px; padding: 18px; font-size: 22px; letter-spacing: .08em; }
+button.pay:hover { background: var(--btn-hover); } button.pay kbd { margin-left: 6px; vertical-align: middle; }
 
 .fkeys { display: flex; flex-wrap: wrap; gap: 0; background: var(--surface); border-top: 1px solid var(--line-strong); }
 .fkeys button { flex: 1 1 0; border: 0; border-right: 1px solid var(--line); border-radius: 0; padding: 8px 4px; font-size: 12.5px; background: transparent; display: flex; gap: 6px; align-items: center; justify-content: center; white-space: nowrap; }
@@ -55,13 +55,13 @@ button.pay:hover { background: #333; } button.pay kbd { color: #111; margin-left
 .paybig { font: 600 34px/1.1 var(--mono); text-align: right; color: var(--ink); }
 .methods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0; }
 .methods button { padding: 8px 2px; font-size: 13px; display: flex; flex-direction: column; gap: 3px; align-items: center; border-radius: 3px; }
-.methods button.on { background: var(--ink); color: #fff; border-color: var(--ink); } .methods button.on kbd { color: #111; }
+.methods button.on { background: var(--btn); color: var(--on-btn); border-color: var(--btn); }
 .quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .change { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-strong); }
 .change b { font: 600 28px var(--mono); }
 .done-big { text-align: center; padding: 10px 0 4px; } .done-big .k { font: 600 44px var(--mono); color: var(--ink); } .done-big .l { color: var(--muted); letter-spacing: .12em; font-size: 12px; }
 .lst { width: 100%; border-collapse: collapse; font-size: 14px; } .lst td, .lst th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; } .lst th { font-weight: 500; font-size: 12px; color: var(--muted); }
-.lst tr.sel { background: var(--yellow-bg); box-shadow: inset 3px 0 0 var(--ink); } .lst td.r, .lst th.r { text-align: right; }
+.lst tr.sel { background: var(--sel); box-shadow: inset 3px 0 0 var(--ink); } .lst td.r, .lst th.r { text-align: right; }
 .helpgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 28px; } .helpgrid div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 
 @media (max-width: 900px) { .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .right { flex-direction: row; flex-wrap: wrap; } .total { flex: 1 1 100%; } .fkeys button kbd { display: none; } }

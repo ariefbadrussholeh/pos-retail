@@ -318,7 +318,7 @@
       body: `<div class="done-big"><div class="l">${big[0]}</div><div class="k">${esc(big[1])}</div></div>
         <p class="muted center" style="margin:10px 0 0;font-size:13px">Total ${rp(sale.total)}${sale.customer_name ? ' &middot; ' + esc(sale.customer_name) : ''}</p>
         <p class="center" style="margin:14px 0 0;font-size:13px"><kbd>P</kbd> cetak struk &nbsp; <kbd>I</kbd> invoice &nbsp; <kbd>J</kbd> surat jalan &nbsp; ${docs}</p>`,
-      footer: '<button class="primary" data-n autofocus>Transaksi baru <kbd style="color:#111">Enter</kbd></button>',
+      footer: '<button class="primary" data-n autofocus>Transaksi baru <kbd>Enter</kbd></button>',
       onKey: (e, mm) => {
         const k = e.key.toLowerCase();
         if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); mm.close(); }
@@ -357,7 +357,7 @@
 
   function help() {
     const rows = [['F1', 'Bantuan ini'], ['F2', 'Fokus ke kolom cari'], ['F3', 'Ubah qty baris terpilih'], ['F4', 'Pilih pelanggan'], ['F5', 'Tahan transaksi'], ['F6', 'Panggil transaksi ditahan'], ['F7', 'Diskon baris terpilih'], ['F8', 'Diskon total'], ['F9', 'Riwayat hari ini / cetak ulang'], ['F10', 'Buka laci kas'], ['F12 / End', 'Bayar'], ['Enter (kosong)', 'Bayar'], ['Ctrl+P', 'Printer & perangkat'], ['Ctrl+K', 'Scan barcode dengan kamera'], ['Ctrl+Del', 'Kosongkan keranjang'], ['Qty*kode', 'Contoh 3*8999...'], ['Qty*  lalu scan', 'Qty untuk barang berikut'], ['+ / -', 'Qty baris +1 / -1'], ['Del', 'Hapus baris terpilih'], ['Up / Down', 'Pilih baris / hasil'], ['Esc', 'Bersihkan input']];
-    const m = POS.modal({ title: 'Pintasan keyboard', wide: true, body: '<div class="helpgrid">' + rows.map((r) => `<div><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('') + '</div>', footer: '<button class="primary" autofocus>Tutup <kbd style="color:#111">Esc</kbd></button>' });
+    const m = POS.modal({ title: 'Pintasan keyboard', wide: true, body: '<div class="helpgrid">' + rows.map((r) => `<div><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('') + '</div>', footer: '<button class="primary" autofocus>Tutup <kbd>Esc</kbd></button>' });
     m.el.addEventListener('click', (e) => { if (e.target.closest('button')) m.close(); });
   }
 

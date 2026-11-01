@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Masuk</title>
+<script src="/js/theme.js"></script>
 <link rel="stylesheet" href="/css/base.css">
 <style>
   body { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
@@ -24,8 +25,9 @@
   <div id="err" class="err hidden"></div>
   <div class="row"><label class="f" for="u">Username</label><input id="u" name="username" autocomplete="username" autofocus required></div>
   <div class="row"><label class="f" for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
-  <button class="primary" id="go">Masuk <kbd style="color:#111">Enter</kbd></button>
-  <div class="hint">Kasir langsung masuk ke layar kasir. Owner masuk ke panel admin.</div>
+  <button class="primary" id="go">Masuk <kbd>Enter</kbd></button>
+  <div class="hint"><span id="themeSlot"></span></div>
+  <div class="hint" style="margin-top:6px">Kasir langsung masuk ke layar kasir. Owner masuk ke panel admin.</div>
 </form>
 <script src="/js/common.js"></script>
 <script>

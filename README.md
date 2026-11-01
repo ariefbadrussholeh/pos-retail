@@ -84,6 +84,21 @@ Admin > Laporan & Excel: penjualan harian, rincian transaksi, penjualan per bara
 - Jalankan di belakang reverse proxy HTTPS (Nginx/Caddy). Perlu HTTPS agar ESC/POS dan scan kamera jalan dari perangkat lain.
 - Cadangkan database secara berkala (Supabase: backup bawaan; MySQL: `mysqldump`).
 
+## Tampilan gelap dan bar progres
+
+- Tombol **Gelap/Terang** ada di layar masuk, panel admin (kiri bawah), dan layar kasir (atas). Pintasan `Alt+T`. Default mengikuti pengaturan sistem; pilihan disimpan di browser.
+- Bar tipis di atas halaman tampil saat pindah menu, memuat data, dan pindah antar halaman.
+
+## Font PDF dan Vercel
+
+Font PDF ditanam di folder `fonts/` (Liberation Sans: Regular, Bold, Italic) dan dipakai menggantikan Helvetica bawaan pdfkit, yang gagal dimuat di Vercel (`standard-fonts/Helvetica.cjs` tidak ikut ter-bundle). Di Vercel pastikan folder ikut ter-deploy, contoh `vercel.json`:
+
+```json
+{ "functions": { "api/index.js": { "includeFiles": "fonts/**" } } }
+```
+
+Ganti `api/index.js` dengan entrypoint function Anda.
+
 ## Pengujian
 
 ```bash
