@@ -48,7 +48,7 @@ app.use((e, req, res, next) => {
   else if (code === '23503' || code === 'ER_ROW_IS_REFERENCED_2' || code === 1451) { status = 409; msg = 'Data masih dipakai oleh transaksi lain'; }
   else if (status === 500) { console.error(e); msg = 'Terjadi kesalahan pada server'; }
   if (res.headersSent) return next(e);
-  res.status(status).json({ error: msg, details: e.details });
+  res.status(status).json({ error: msg, details: e.details, debug: e.message, stack: (e.stack || '').split('\n').slice(0, 4) });
 });
 
 if (require.main === module) {
