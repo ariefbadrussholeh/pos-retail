@@ -141,11 +141,12 @@
     await A.list(el, {
       title: 'Pengguna', sub: 'Owner mengakses semua menu. Kasir hanya layar kasir.', actions: '<button class="primary" data-act="new">Tambah pengguna</button>',
       url: () => '/api/users',
-      cols: [{ h: 'Username', f: (r) => `<span class="mono">${esc(r.username)}</span>` }, { h: 'Nama', f: (r) => esc(r.name) }, { h: 'Peran', f: (r) => A.tag(r.role, r.role === 'owner' ? 'blue' : '') }, { h: 'Status', f: (r) => (r.active ? A.tag('aktif', 'green') : A.tag('nonaktif', 'red')) }, { h: '', cls: 'r', f: () => A.btn('edit', 'Ubah') }],
+      cols: [{ h: 'Username', f: (r) => `<span class="mono">${esc(r.username)}</span>` }, { h: 'Nama', f: (r) => esc(r.name) }, { h: 'Peran', f: (r) => A.tag(r.role, r.role === 'owner' ? 'blue' : '') }, { h: 'Toko', f: (r) => (r.role === 'owner' ? '<span class="muted">Semua toko</span>' : esc(r.store_name || '-')) }, { h: 'Status', f: (r) => (r.active ? A.tag('aktif', 'green') : A.tag('nonaktif', 'red')) }, { h: '', cls: 'r', f: () => A.btn('edit', 'Ubah') }],
       async onAct(act, row, reload) {
         const creating = act === 'new';
-        const fields = [...(creating ? [{ name: 'username', label: 'Username', required: true }] : []), { name: 'name', label: 'Nama lengkap', required: true }, { name: 'role', label: 'Peran', type: 'select', options: [['kasir', 'Kasir'], ['owner', 'Owner']] }, { name: 'password', label: creating ? 'Password (min. 6)' : 'Password baru', type: 'password', required: creating, hint: creating ? '' : 'Kosongkan jika tidak diganti' }, ...(creating ? [] : [{ name: 'active', label: 'Akun aktif', type: 'checkbox' }])];
-        const ok = await A.form({ title: creating ? 'Tambah pengguna' : 'Ubah pengguna', fields, values: creating ? { role: 'kasir' } : row, onSubmit: (v) => { if (!creating && !v.password) delete v.password; return creating ? POS.post('/api/users', v) : POS.put('/api/users/' + row.id, v); } });
+        const stores = (await POS.get('/api/stores')).rows;
+        const fields = [...(creating ? [{ name: 'username', label: 'Username', required: true }] : []), { name: 'name', label: 'Nama lengkap', required: true }, { name: 'role', label: 'Peran', type: 'select', options: [['kasir', 'Kasir'], ['owner', 'Owner']] }, { name: 'store_id', label: 'Toko (untuk kasir)', type: 'select', options: [['', '- pilih -'], ...stores.filter((s) => s.active).map((s) => [s.id, s.name + ' (' + s.code + ')'])], hint: 'Kasir hanya bisa membuka toko ini. Owner otomatis bisa semua toko.' }, { name: 'password', label: creating ? 'Password (min. 6)' : 'Password baru', type: 'password', required: creating, hint: creating ? '' : 'Kosongkan jika tidak diganti' }, ...(creating ? [] : [{ name: 'active', label: 'Akun aktif', type: 'checkbox' }])];
+        const ok = await A.form({ title: creating ? 'Tambah pengguna' : 'Ubah pengguna', fields, values: creating ? { role: 'kasir', store_id: A.ME.store.id } : row, onSubmit: (v) => { if (!creating && !v.password) delete v.password; if (v.role === 'owner') v.store_id = null; return creating ? POS.post('/api/users', v) : POS.put('/api/users/' + row.id, v); } });
         if (ok) { toast('Tersimpan', 'ok'); reload(); }
       },
     });
@@ -162,10 +163,20 @@
     if (out.length > 560000) throw new Error('Gambar terlalu besar, gunakan logo yang lebih sederhana');
     return out;
   }
+  // Gambar ornamen template: dipertahankan transparansi (PNG), dikecilkan sesuai lebar maksimal
+  async function resizeImg(file, maxW) {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('File bukan gambar yang valid')); i.src = url; });
+    const sc = Math.min(1, maxW / img.width); const w = Math.max(Math.round(img.width * sc), 1), h = Math.max(Math.round(img.height * sc), 1);
+    const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+    const out = c.toDataURL('image/png');
+    if (out.length > 880000) throw new Error('Gambar terlalu besar, gunakan gambar yang lebih sederhana');
+    return out;
+  }
   const SAMPLE = { sale_no: 'INV-20261031-0001', created_at: '2026-10-31 10:15:00', cashier: 'Kasir Satu', customer_name: '', method: 'TUNAI', subtotal: 21000, discount: 1000, tax: 0, total: 20000, paid: 50000, change_amount: 30000, items: [{ name: 'Air Mineral 600ml', unit: 'btl', qty: 2, price: 3500, discount: 0, total: 7000 }, { name: 'Keripik Singkong 150g', unit: 'bks', qty: 1, price: 9500, discount: 0, total: 9500 }, { name: 'Pulpen Hitam', unit: 'pcs', qty: 1, price: 3000, discount: 500, total: 2500 }] };
 
   A.route('settings', { title: 'Identitas & Pengaturan', async render(el) {
-    const S = { ...await POS.get('/api/settings') }; let logo = S.logo || '';
+    const S = { ...await POS.get('/api/settings') }; let logo = S.logo || ''; const IM = { tpl_header: S.tpl_header || '', tpl_footer: S.tpl_footer || '', tpl_phone_icon: S.tpl_phone_icon || '' };
     const inp = (k, label, o = {}) => `<div class="${o.span === 2 ? 'span2' : ''}"><label class="f" for="s_${k}">${label}</label>${o.area ? `<textarea id="s_${k}" data-s="${k}" rows="${o.area}">${esc(S[k])}</textarea>` : o.opts ? `<select id="s_${k}" data-s="${k}">${o.opts.map(([v, l]) => `<option value="${v}" ${String(S[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<input id="s_${k}" data-s="${k}" value="${esc(S[k])}" ${o.ph ? `placeholder="${esc(o.ph)}"` : ''}>`}${o.hint ? `<div class="hint">${o.hint}</div>` : ''}</div>`;
     const chk = (k, label, hint) => `<div class="span2"><label class="sw"><input type="checkbox" data-s="${k}" ${S[k] ? 'checked' : ''}> ${label}</label>${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
     el.innerHTML = A.head('Identitas & Pengaturan', 'Data toko tampil di aplikasi, struk, kop surat, invoice, surat jalan, dan permohonan pembayaran', '<button data-p="device">Printer &amp; perangkat ini</button>') + `
@@ -176,11 +187,18 @@
       <div class="card sect"><h2>Struk</h2><p>Teks tambahan dan ukuran kertas.</p><div class="form-grid">${inp('receipt_header', 'Teks di atas struk', { span: 2, area: 2, hint: 'Opsional, satu baris per teks' })}${inp('receipt_footer', 'Teks di bawah struk', { span: 2, area: 2 })}${inp('paper_width', 'Lebar kertas bawaan', { opts: [['58', '58 mm'], ['80', '80 mm']] })}<div></div>${chk('receipt_show_logo', 'Cetak logo di struk', 'Logo ikut tercetak pada printer ESC/POS dan cetak browser')}${chk('receipt_show_npwp', 'Cetak NPWP di struk')}</div></div>
       <div class="card sect"><h2>Pajak, stok & barcode</h2><p>Berlaku untuk transaksi dan barang baru.</p><div class="form-grid">${inp('tax_percent', 'Pajak (%)', { hint: '0 = tanpa pajak' })}${inp('tax_label', 'Nama pajak', { ph: 'PPN' })}${chk('tax_inclusive', 'Harga jual sudah termasuk pajak')}${chk('allow_negative_stock', 'Izinkan penjualan saat stok kurang dari nol', 'Matikan agar kasir tidak bisa menjual melebihi stok')}${chk('auto_barcode', 'Buat barcode EAN-13 otomatis untuk barang baru tanpa barcode', 'Kode berawalan 20 (khusus internal toko), unik, dan bisa dicetak sebagai label')}${inp('default_due_days', 'Tempo kredit bawaan (hari)')}</div></div>
       <div class="card sect"><h2>Dokumen</h2><p>Dipakai pada invoice, surat jalan, dan permohonan pembayaran (PDF).</p><div class="form-grid">${inp('bank_name', 'Bank')}${inp('bank_account', 'Nomor rekening')}${inp('bank_holder', 'Atas nama', { span: 2 })}${inp('signer_name', 'Nama penandatangan')}${inp('signer_title', 'Jabatan', { ph: 'Pimpinan' })}${inp('doc_note', 'Catatan kaki invoice', { span: 2, area: 2, hint: 'Contoh: Barang yang sudah dibeli tidak dapat dikembalikan.' })}</div></div>
+      <div class="card sect"><h2>Template dokumen</h2><p>Tampilan invoice, surat jalan, dan SPP untuk toko ini. Template Ardana memakai logo, ornamen atas, strip bawah, dan nomor telepon toko.</p><div class="form-grid">
+        ${inp('doc_template', 'Template', { opts: [['default', 'Bawaan (nota penjualan)'], ['ardana', 'Ardana (logo + ornamen)']] })}${inp('doc_no_format', 'Format nomor Penjualan Custom', { hint: '{n} urut, {rom} bulan romawi, {code} kode toko, {yyyy} tahun. Contoh: 02 / X / AJS / 2026' })}
+        <div><label class="f" for="s_doc_accent">Warna aksen</label><input type="color" id="s_doc_accent" data-s="doc_accent" value="${esc(S.doc_accent || '#E8710A')}" style="height:34px;padding:2px"></div>
+        <div><label class="f" for="s_doc_accent2">Warna kedua (template Ardana)</label><input type="color" id="s_doc_accent2" data-s="doc_accent2" value="${esc(S.doc_accent2 || '#1F3864')}" style="height:34px;padding:2px"></div>
+        ${inp('custom_tax_percent', 'Tarif pajak bawaan Penjualan Custom (%)', { hint: 'Bisa diubah di setiap transaksi' })}${inp('doc_thanks', 'Ucapan di dokumen (template Ardana)', { area: 2, hint: 'Satu baris per teks' })}
+        ${['tpl_header|Ornamen kanan atas|PNG transparan, lebar sekitar 700 px|700', 'tpl_footer|Strip / ornamen bawah|PNG transparan, lebar sekitar 1400 px|1400', 'tpl_phone_icon|Ikon telepon|Kecil, dipakai di samping nomor telepon|120'].map((x) => { const [k, label, hint] = x.split('|'); return `<div class="span2"><label class="f">${label}</label><div class="logo-box"><div class="logo-prev" id="im_${k}" style="width:140px;height:70px;background:#ddd"></div><div><input type="file" data-im="${k}" accept="image/png,image/jpeg" style="width:auto"> <button type="button" class="sm" data-imrm="${k}">Hapus</button><div class="hint">${hint}</div></div></div></div>`; }).join('')}
+      </div></div>
       <div class="sticky-save"><span id="sstat" class="muted" style="align-self:center"></span><button class="primary" id="ssave">Simpan pengaturan <kbd>Ctrl+S</kbd></button></div>
     </div>
     <div style="position:sticky;top:20px"><div class="card sect"><h3>Pratinjau kop surat</h3><div class="kop" id="kop"></div></div><div class="card"><h3>Pratinjau struk</h3><div class="rc" id="rc"></div></div></div></div>`;
 
-    const val = () => { const o = {}; $$('[data-s]', el).forEach((n) => { o[n.dataset.s] = n.type === 'checkbox' ? n.checked : n.value; }); o.logo = logo; return o; };
+    const val = () => { const o = {}; $$('[data-s]', el).forEach((n) => { o[n.dataset.s] = n.type === 'checkbox' ? n.checked : n.value; }); o.logo = logo; Object.assign(o, IM); return o; };
     function preview() {
       const o = { ...S, ...val() }; o.tax_percent = POS.toNum(o.tax_percent) || 0; o.paper_width = +o.paper_width;
       $('#lp', el).innerHTML = logo ? `<img src="${logo}" alt="">` : '<span class="muted" style="font-size:12px">Belum ada</span>';
@@ -193,10 +211,14 @@
     el.addEventListener('input', preview); el.addEventListener('change', preview);
     $('#lf', el).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { logo = await resizeLogo(f); preview(); } catch (er) { toast(er.message, 'err'); } e.target.value = ''; };
     $('#lrm', el).onclick = () => { logo = ''; preview(); };
+    const drawIm = () => Object.keys(IM).forEach((k) => { $('#im_' + k, el).innerHTML = IM[k] ? `<img src="${IM[k]}" alt="">` : '<span class="muted" style="font-size:12px">Belum ada</span>'; });
+    el.addEventListener('change', async (e) => { const k = e.target.dataset && e.target.dataset.im; if (!k) return; const f = e.target.files[0]; if (!f) return; try { IM[k] = await resizeImg(f, { tpl_header: 700, tpl_footer: 1400, tpl_phone_icon: 120 }[k]); drawIm(); } catch (er) { toast(er.message, 'err'); } e.target.value = ''; });
+    el.addEventListener('click', (e) => { const k = e.target.dataset && e.target.dataset.imrm; if (k) { IM[k] = ''; drawIm(); } });
+    drawIm();
     el.querySelector('[data-p=device]').onclick = () => POS.deviceDialog(A.ST);
     async function save() {
       const o = val(); const n = POS.toNum(o.tax_percent); if (!(n >= 0 && n <= 100)) return toast('Pajak harus 0-100', 'err');
-      o.tax_percent = n; o.default_due_days = POS.toNum(o.default_due_days) || 14;
+      o.tax_percent = n; o.default_due_days = POS.toNum(o.default_due_days) || 14; o.custom_tax_percent = POS.toNum(o.custom_tax_percent) || 0;
       if (!String(o.store_name).trim()) return toast('Nama toko wajib diisi', 'err');
       $('#ssave', el).disabled = true;
       try { A.ST = await POS.put('/api/settings', o); A.refreshBrand(); $('#sstat', el).textContent = 'Tersimpan ' + new Date().toTimeString().slice(0, 5); toast('Pengaturan tersimpan', 'ok'); }

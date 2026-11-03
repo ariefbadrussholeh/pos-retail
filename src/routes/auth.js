@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { auth, sign, setCookie, COOKIE } = require('../middleware/auth');
 const { wrap, err } = require('../services/util');
+const stores = require('../services/stores');
 
 const fails = new Map(); // ip+user -> {n, until}
 router.post('/login', wrap(async (req, res) => {
@@ -20,7 +21,11 @@ router.post('/login', wrap(async (req, res) => {
   res.json({ id: u.id, username: u.username, name: u.name, role: u.role });
 }));
 router.post('/logout', (req, res) => { res.clearCookie(COOKIE); res.json({ ok: true }); });
-router.get('/me', auth, (req, res) => res.json(req.user));
+router.get('/me', auth, wrap(async (req, res) => {
+  const list = (await stores.all()).filter((s) => s.active || s.id === req.sid);
+  const { store_id, ...u } = req.user;
+  res.json({ ...u, store: req.store, stores: req.user.role === 'owner' ? list : [req.store] });
+}));
 router.post('/password', auth, wrap(async (req, res) => {
   const { old_password, new_password } = req.body;
   if (!new_password || String(new_password).length < 6) throw err(400, 'Password baru minimal 6 karakter');

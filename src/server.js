@@ -17,11 +17,17 @@ app.use((req, res, next) => {
   next();
 });
 
+const { ensureSchema } = require('./db/schema');
 const master = require('./routes/master');
 const purchasing = require('./routes/purchasing');
 const inventory = require('./routes/inventory');
 const reports = require('./routes/reports');
+// Migrasi skema otomatis sekali per proses (penting untuk Vercel / deploy baru)
+app.use('/api', (req, res, next) => ensureSchema().then(() => next(), next));
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/stores', require('./routes/stores'));
+app.use('/api/invoices', require('./routes/invoices'));
+app.use('/api/backup', require('./routes/backup'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/categories', master.categories);
 app.use('/api/suppliers', master.suppliers);

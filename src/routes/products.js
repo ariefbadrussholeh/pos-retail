@@ -12,13 +12,13 @@ const FROM = 'FROM products p LEFT JOIN categories c ON c.id = p.category_id';
 // Katalog ringkas untuk layar kasir (difilter di browser agar pencarian instan)
 router.get('/catalog', auth, wrap(async (req, res) => {
   const rows = await db.query(`SELECT p.id, p.sku, p.barcode, p.name, p.unit, p.sell_price AS price, p.wholesale_price AS wprice, p.wholesale_min AS wmin, p.stock, c.name AS category
-    ${FROM} WHERE p.active = 1 ORDER BY p.name`);
+    ${FROM} WHERE p.active = 1 AND p.store_id = ? ORDER BY p.name`, [req.sid]);
   res.json(rows);
 }));
 
 router.get('/', auth, wrap(async (req, res) => {
   const { limit, offset } = page(req.query, 50);
-  const w = []; const p = [];
+  const w = ['p.store_id = ?']; const p = [req.sid];
   if (req.query.q) { const l = like(req.query.q); w.push('(LOWER(p.name) LIKE ? OR LOWER(p.sku) LIKE ? OR LOWER(p.barcode) LIKE ?)'); p.push(l, l, l); }
   if (req.query.category_id) { w.push('p.category_id = ?'); p.push(req.query.category_id); }
   if (req.query.active === '1') w.push('p.active = 1');
@@ -36,7 +36,7 @@ router.post('/barcode/next', auth, owner, wrap(async (req, res) => {
 // Beri barcode otomatis ke semua barang aktif yang belum punya
 router.post('/barcode/fill', auth, owner, wrap(async (req, res) => {
   const n = await db.tx(async (t) => {
-    const rows = await t.query("SELECT id FROM products WHERE active = 1 AND (barcode IS NULL OR barcode = '') ORDER BY id");
+    const rows = await t.query("SELECT id FROM products WHERE store_id = ? AND active = 1 AND (barcode IS NULL OR barcode = '') ORDER BY id", [req.sid]);
     for (const r of rows) await t.exec('UPDATE products SET barcode = ? WHERE id = ?', [await barcode.next(t), r.id]);
     return rows.length;
   });
@@ -44,7 +44,7 @@ router.post('/barcode/fill', auth, owner, wrap(async (req, res) => {
 }));
 
 router.get('/:id', auth, wrap(async (req, res) => {
-  const row = await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ?`, [req.params.id]);
+  const row = await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ? AND p.store_id = ?`, [req.params.id, req.sid]);
   if (!row) throw err(404, 'Barang tidak ditemukan');
   res.json(row);
 }));
@@ -65,29 +65,31 @@ function clean(b, creating) {
   return d;
 }
 
-async function autoSku(t) {
-  const n = await t.nextCounter('SKU');
+async function autoSku(t, sid) {
+  const n = await t.nextCounter(`${sid}:SKU`);
   return 'B' + String(n).padStart(6, '0');
 }
-async function checkBarcode(t, barcode, exceptId) {
+async function checkBarcode(t, sid, barcode, exceptId) {
   if (!barcode) return;
-  const x = await t.one('SELECT id, name FROM products WHERE (barcode = ? OR sku = ?) AND id <> ?', [barcode, barcode, exceptId || 0]);
+  const x = await t.one('SELECT id, name FROM products WHERE store_id = ? AND (barcode = ? OR sku = ?) AND id <> ?', [sid, barcode, barcode, exceptId || 0]);
   if (x) throw err(409, `Barcode sudah dipakai: ${x.name}`);
 }
 
 router.post('/', auth, owner, wrap(async (req, res) => {
   const d = clean(req.body, true);
   const opening = round3(num(req.body.stock));
-  const cfg = await settings.get();
+  const cfg = await settings.get(req.sid);
   const id = await db.tx(async (t) => {
-    if (!d.sku) d.sku = await autoSku(t);
+    if (!d.sku) d.sku = await autoSku(t, req.sid);
     if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
-    await checkBarcode(t, d.barcode, 0);
-    await checkBarcode(t, d.sku, 0);
+    await checkBarcode(t, req.sid, d.barcode, 0);
+    await checkBarcode(t, req.sid, d.sku, 0);
+    if (d.category_id && !(await t.one('SELECT id FROM categories WHERE id = ? AND store_id = ?', [d.category_id, req.sid]))) throw err(400, 'Kategori tidak ditemukan');
+    d.store_id = req.sid;
     d.created_at = t.now();
     d.stock = 0;
     const pid = await t.insert('products', d);
-    if (opening) await stock.move(t, { product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal', user_id: req.user.id, allowNegative: true });
+    if (opening) await stock.move(t, { store_id: req.sid, product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal', user_id: req.user.id, allowNegative: true });
     return pid;
   });
   res.status(201).json(await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ?`, [id]));
@@ -97,24 +99,25 @@ router.put('/:id', auth, owner, wrap(async (req, res) => {
   const d = clean(req.body, false);
   delete d.stock;
   await db.tx(async (t) => {
-    if (d.barcode) await checkBarcode(t, d.barcode, +req.params.id);
-    if (d.sku) await checkBarcode(t, d.sku, +req.params.id);
+    if (d.barcode) await checkBarcode(t, req.sid, d.barcode, +req.params.id);
+    if (d.sku) await checkBarcode(t, req.sid, d.sku, +req.params.id);
+    if (d.category_id && !(await t.one('SELECT id FROM categories WHERE id = ? AND store_id = ?', [d.category_id, req.sid]))) throw err(400, 'Kategori tidak ditemukan');
     const k = Object.keys(d);
-    if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`, [...k.map((c) => d[c]), req.params.id]);
+    if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ? AND store_id = ?`, [...k.map((c) => d[c]), req.params.id, req.sid]);
   });
-  const row = await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ?`, [req.params.id]);
+  const row = await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ? AND p.store_id = ?`, [req.params.id, req.sid]);
   if (!row) throw err(404, 'Barang tidak ditemukan');
   res.json(row);
 }));
 
 // Hapus permanen hanya jika belum punya riwayat; selain itu dinonaktifkan
 router.delete('/:id', auth, owner, wrap(async (req, res) => {
-  const used = await db.one('SELECT COUNT(*) AS n FROM stock_moves WHERE product_id = ?', [req.params.id]);
+  const used = await db.one('SELECT COUNT(*) AS n FROM stock_moves m JOIN products p ON p.id = m.product_id WHERE m.product_id = ? AND p.store_id = ?', [req.params.id, req.sid]);
   if (used.n) {
-    await db.exec('UPDATE products SET active = 0 WHERE id = ?', [req.params.id]);
+    await db.exec('UPDATE products SET active = 0 WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
     return res.json({ ok: true, deactivated: true });
   }
-  await db.exec('DELETE FROM products WHERE id = ?', [req.params.id]);
+  await db.exec('DELETE FROM products WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
   res.json({ ok: true });
 }));
 
@@ -124,33 +127,33 @@ router.post('/import', auth, owner, wrap(async (req, res) => {
   if (!rows.length) throw err(400, 'Tidak ada baris');
   if (rows.length > 5000) throw err(400, 'Maksimal 5000 baris per impor');
   const result = { created: 0, updated: 0, errors: [] };
-  const cfg = await settings.get();
+  const cfg = await settings.get(req.sid);
   await db.tx(async (t) => {
-    const cats = new Map((await t.query('SELECT id, name FROM categories')).map((c) => [c.name.toLowerCase(), c.id]));
+    const cats = new Map((await t.query('SELECT id, name FROM categories WHERE store_id = ?', [req.sid])).map((c) => [c.name.toLowerCase(), c.id]));
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       try {
         const b = { ...r };
         if (r.category) {
           const key = String(r.category).trim().toLowerCase();
-          if (key) { if (!cats.has(key)) cats.set(key, await t.insert('categories', { name: String(r.category).trim() })); b.category_id = cats.get(key); }
+          if (key) { if (!cats.has(key)) cats.set(key, await t.insert('categories', { store_id: req.sid, name: String(r.category).trim() })); b.category_id = cats.get(key); }
         }
         const d = clean(b, true);
         const conds = []; const cp = [];
         if (d.sku) { conds.push('sku = ?'); cp.push(d.sku); }
         if (d.barcode) { conds.push('barcode = ?'); cp.push(d.barcode); }
-        const ex = conds.length ? await t.one(`SELECT id FROM products WHERE ${conds.join(' OR ')}`, cp) : null;
+        const ex = conds.length ? await t.one(`SELECT id FROM products WHERE store_id = ? AND (${conds.join(' OR ')})`, [req.sid, ...cp]) : null;
         if (ex) {
           const k = Object.keys(d);
           await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`, [...k.map((c) => d[c]), ex.id]);
           result.updated++;
         } else {
-          if (!d.sku) d.sku = await autoSku(t);
+          if (!d.sku) d.sku = await autoSku(t, req.sid);
           if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
-          d.created_at = t.now(); d.stock = 0;
+          d.store_id = req.sid; d.created_at = t.now(); d.stock = 0;
           const pid = await t.insert('products', d);
           const opening = round3(num(r.stock));
-          if (opening) await stock.move(t, { product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal (impor)', user_id: req.user.id, allowNegative: true });
+          if (opening) await stock.move(t, { store_id: req.sid, product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal (impor)', user_id: req.user.id, allowNegative: true });
           result.created++;
         }
       } catch (e) { result.errors.push({ row: i + 1, error: e.message }); }

@@ -4,7 +4,7 @@ const settings = require('./settings');
 // Ubah stok + catat kartu stok. Harus dipanggil di dalam transaksi `t`.
 // qty bertanda: + masuk, - keluar. Baris produk terkunci oleh UPDATE sampai commit.
 async function move(t, o) {
-  const r = await t.exec('UPDATE products SET stock = stock + ? WHERE id = ?', [round3(o.qty), o.product_id]);
+  const r = await t.exec('UPDATE products SET stock = stock + ? WHERE id = ? AND store_id = ?', [round3(o.qty), o.product_id, o.store_id]);
   if (!r.rowCount) throw err(400, 'Barang tidak ditemukan');
   const p = await t.one('SELECT stock, name FROM products WHERE id = ?', [o.product_id]);
   if (o.qty < 0 && p.stock < 0 && !o.allowNegative) {
@@ -17,5 +17,5 @@ async function move(t, o) {
   });
   return p.stock;
 }
-async function allowNegative() { return (await settings.get()).allow_negative_stock; }
+async function allowNegative(sid) { return (await settings.get(sid)).allow_negative_stock; }
 module.exports = { move, allowNegative };

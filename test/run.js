@@ -15,21 +15,21 @@ const ok = (name) => { pass++; console.log('  ok  ' + name); };
   await createSchema();
   await createSchema(); // idempoten
   await db.insert('users', { username: 'owner', name: 'Pemilik', role: 'owner', password_hash: bcrypt.hashSync('owner123', 4), active: 1, created_at: db.now() });
-  await db.insert('users', { username: 'kasir1', name: 'Kasir Satu', role: 'kasir', password_hash: bcrypt.hashSync('kasir123', 4), active: 1, created_at: db.now() });
+  await db.insert('users', { username: 'kasir1', name: 'Kasir Satu', role: 'kasir', store_id: 1, password_hash: bcrypt.hashSync('kasir123', 4), active: 1, created_at: db.now() });
 
   const server = require('../src/server').listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const mk = () => {
-    let cookie = '';
+    let cookie = ''; const h = {};
     const call = async (method, url, body, raw) => {
-      const r = await fetch(base + url, { method, headers: { 'content-type': 'application/json', cookie }, body: body ? JSON.stringify(body) : undefined });
+      const r = await fetch(base + url, { method, headers: { 'content-type': 'application/json', cookie, ...h }, body: body ? JSON.stringify(body) : undefined });
       const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
       if (raw) return r;
       const j = await r.json().catch(() => ({}));
       if (Array.isArray(j)) { j.code = r.status; return j; }
       return { ...j, code: r.status, _json: j };
     };
-    return { get: (u, raw) => call('GET', u, null, raw), post: (u, b) => call('POST', u, b || {}), put: (u, b) => call('PUT', u, b), del: (u) => call('DELETE', u) };
+    return { h, cookie: () => cookie, get: (u, raw) => call('GET', u, null, raw), post: (u, b) => call('POST', u, b || {}), put: (u, b) => call('PUT', u, b), del: (u) => call('DELETE', u) };
   };
   const A = mk(); const K = mk(); const anon = mk();
 
@@ -167,10 +167,13 @@ const ok = (name) => { pass++; console.log('  ok  ' + name); };
   assert.equal((await A.get(`/api/docs/invoice/sale/${sw.id}`, true)).status, 409); ok('dokumen transaksi void ditolak');
 
   // ---- pengguna
-  assert.equal((await A.post('/api/users', { username: 'kasir2', name: 'Kasir Dua', role: 'kasir', password: 'abc12345' })).code, 201); ok('tambah pengguna');
+  assert.equal((await A.post('/api/users', { username: 'kasir2', name: 'Kasir Dua', role: 'kasir', store_id: 1, password: 'abc12345' })).code, 201); ok('tambah pengguna');
+  assert.equal((await A.post('/api/users', { username: 'kasir9', name: 'Tanpa Toko', role: 'kasir', password: 'abc12345' })).code, 400); ok('kasir wajib punya toko'); 
   assert.equal((await A.put('/api/users/1', { active: false })).code, 400); ok('tidak bisa menonaktifkan diri sendiri');
   assert.equal((await A.del('/api/categories/' + cat.id)).code, 409); ok('hapus kategori yang dipakai ditolak (FK)');
   const del = await A.del('/api/products/' + p1.id); assert.equal(del.deactivated, true); ok('barang berriwayat dinonaktifkan, bukan dihapus');
+
+  await require('./multi')({ A, K, mk, db, ok, assert, base });
 
   console.log(`\n${pass} pemeriksaan lulus (${db.client})`);
   server.close(); await db.close(); process.exit(0);

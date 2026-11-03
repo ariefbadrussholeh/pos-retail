@@ -28,11 +28,19 @@
   const slot = document.getElementById('themeSlot'); if (slot && window.Theme) Theme.mount(slot);
 
   // ---------- API ----------
+  // Toko aktif (owner bisa berpindah). Disimpan per tab (sessionStorage) dan sebagai pilihan terakhir (localStorage).
+  const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k) || localStorage.getItem(k); if (v == null) { sessionStorage.removeItem(k); localStorage.removeItem(k); } else { sessionStorage.setItem(k, v); localStorage.setItem(k, v); } } catch (e) { return null; } };
+  POS.storeId = +store('pos_store') || null;
+  POS.setStore = (id) => { POS.storeId = id ? +id : null; store('pos_store', id ? String(id) : null); };
+  POS.logo = () => '/api/settings/logo?' + (POS.storeId ? 'store=' + POS.storeId + '&' : '');
+  // Ambil profil + toko aktif; bila toko tersimpan sudah tidak valid, pakai bawaan server
+  POS.me = async () => { let me; try { me = await POS.get('/api/auth/me'); } catch (e) { if (e.status === 400 && POS.storeId) { POS.setStore(null); me = await POS.get('/api/auth/me'); } else throw e; } POS.setStore(me.store.id); return me; };
+  POS.su = (u) => (POS.storeId ? u + (u.includes('?') ? '&' : '?') + 'store=' + POS.storeId : u); // untuk tautan/unduhan (tanpa header)
   POS.api = async function (method, url, body) {
     PG.start();
     let r, j;
     try {
-      r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+      r = await fetch(url, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(POS.storeId ? { 'X-Store': String(POS.storeId) } : {}) }, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
       j = await r.json().catch(() => ({}));
     } finally { PG.done(); }
     if (r.status === 401 && !url.startsWith('/api/auth/login') && !['/', '/index.html'].includes(location.pathname)) { location.href = '/'; throw new Error('Sesi berakhir'); }
@@ -167,7 +175,7 @@
   POS.printBrowser = function (sale, st, paper) {
     const W = +paper === 58 ? 32 : 48;
     const lines = POS.receiptLines(sale, st, W);
-    const body = lines.map((l) => l.img ? `<div class="img"><img src="/api/settings/logo?t=${Date.now()}" alt=""></div>` : `<div class="${l.big ? 'big ' : ''}${l.b ? 'b' : ''}">${POS.esc(l.text) || '&nbsp;'}</div>`).join('');
+    const body = lines.map((l) => l.img ? `<div class="img"><img src="${POS.logo()}t=${Date.now()}" alt=""></div>` : `<div class="${l.big ? 'big ' : ''}${l.b ? 'b' : ''}">${POS.esc(l.text) || '&nbsp;'}</div>`).join('');
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
     document.body.appendChild(f);
@@ -200,7 +208,7 @@
 
   // --- ESC/POS ---
   async function logoRaster(maxDots) {
-    const img = new Image(); img.src = '/api/settings/logo?t=' + Date.now();
+    const img = new Image(); img.src = POS.logo() + 't=' + Date.now();
     await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
     const w = Math.min(img.naturalWidth, maxDots) & ~7 || 8; const h = Math.max(Math.round(img.naturalHeight * (w / img.naturalWidth)), 1);
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -364,5 +372,5 @@
   };
 
   // Identitas toko di header (nama + logo)
-  POS.brand = (st) => (st.logo || st.has_logo ? `<img src="/api/settings/logo?v=${(st.store_name || '').length}" alt="" class="brand-logo"> ` : '') + POS.esc(st.store_name);
+  POS.brand = (st) => (st.logo || st.has_logo ? `<img src="${POS.logo()}v=${(st.store_name || '').length}" alt="" class="brand-logo"> ` : '') + POS.esc(st.store_name);
 })();

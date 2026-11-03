@@ -2,7 +2,7 @@
 
 Aplikasi kasir dan stok toko retail. Express.js, Postgres (Supabase) atau MySQL/MariaDB, frontend HTML/JS biasa tanpa build step.
 
-Fitur: kasir keyboard-first, stok, penerimaan, pembelian, opname (tanpa approval), hutang/piutang, dashboard, laporan Excel, PDF surat jalan / invoice / permohonan pembayaran, cetak struk (browser dan ESC/POS), scanner barcode, barcode EAN-13 otomatis, identitas toko (nama, alamat, logo) yang dipakai di seluruh aplikasi dan dokumen.
+Fitur: multi toko, penjualan custom (faktur ke instansi), backup & restore, template dokumen per toko, kasir keyboard-first, stok, penerimaan, pembelian, opname (tanpa approval), hutang/piutang, dashboard, laporan Excel, PDF surat jalan / invoice / permohonan pembayaran, cetak struk (browser dan ESC/POS), scanner barcode, barcode EAN-13 otomatis, identitas toko (nama, alamat, logo) yang dipakai di seluruh aplikasi dan dokumen.
 
 ## Mulai
 
@@ -30,8 +30,8 @@ Catatan Supabase: `db:init` menyalakan Row Level Security pada semua tabel tanpa
 
 ## Peran
 
-- **Owner**: semua menu admin (dashboard, barang, pembelian, penerimaan, opname, laporan, pengguna, pengaturan).
-- **Kasir**: hanya layar kasir (`/pos.html`), melihat transaksinya sendiri, mencetak dokumen transaksinya sendiri.
+- **Owner**: semua menu admin dan **semua toko** (berpindah lewat dropdown Toko aktif).
+- **Kasir**: terikat ke **satu toko**, hanya layar kasir (`/pos.html`), melihat transaksinya sendiri, mencetak dokumen transaksinya sendiri.
 
 Tidak ada alur approval. Penerimaan dan opname langsung berlaku saat disimpan. Pembatalan (void) transaksi hanya owner dan mengembalikan stok.
 
@@ -84,6 +84,54 @@ Admin > Laporan & Excel: penjualan harian, rincian transaksi, penjualan per bara
 - Jalankan di belakang reverse proxy HTTPS (Nginx/Caddy). Perlu HTTPS agar ESC/POS dan scan kamera jalan dari perangkat lain.
 - Cadangkan database secara berkala (Supabase: backup bawaan; MySQL: `mysqldump`).
 
+## Multi toko (v1.3)
+
+Satu aplikasi dan satu database untuk banyak toko. Semua data dipisah per toko: barang, kategori, pemasok, pelanggan, stok, harga, transaksi, pembelian, opname, laporan, dashboard, pengaturan, penomoran dokumen, dan template. Antar toko tidak saling terlihat.
+
+- **Owner** memilih toko lewat dropdown *Toko aktif* di sidebar (di layar kasir juga ada). Setiap tab browser mengingat tokonya sendiri.
+- **Kasir** dikunci ke satu toko (diatur di menu Pengguna).
+- Menu **Toko**: tambah toko, ubah nama/kode, nonaktifkan. Saat menambah toko ada opsi *Salin pengaturan dari* toko lain (identitas, pajak, template, gambar). Toko tidak dihapus, hanya dinonaktifkan.
+- SKU dan barcode boleh sama di toko berbeda; nomor dokumen (INV, PO, GR, OP) dihitung per toko.
+
+### Upgrade dari v1.2
+
+Data lama otomatis menjadi **toko pertama** (nama diambil dari pengaturan lama), kasir lama ditempatkan di toko itu, dan penomoran dilanjutkan. Migrasi berjalan sendiri saat aplikasi pertama kali menerima request, atau manual dengan `npm run db:init`. Aman diulang. Sebaiknya unduh backup dulu (v1.2: dump database).
+
+## Penjualan Custom (di luar POS)
+
+Menu **Penjualan Custom** (owner) untuk faktur ke perusahaan/instansi, tampilan admin biasa:
+
+- Pelanggan (perusahaan), **no. kontrak**, **tanggal kontrak**, **no. surat pesanan (SP)**, tanggal dokumen, jatuh tempo, alamat tujuan SPP.
+- **Pajak per transaksi**: tanpa pajak / belum termasuk (ditambahkan) / sudah termasuk, dengan tarif sendiri (bawaan 11%, diatur di Pengaturan).
+- **Harga, nama barang, dan satuan** per baris diatur sendiri dan tidak mengubah master barang.
+- Stok tetap berkurang (kartu stok tercatat), masuk laporan penjualan, dashboard, dan **piutang** (yang belum dibayar). Pembayaran/cicilan dan pembatalan memakai menu Penjualan yang sama.
+- Nomor otomatis sesuai format toko, contoh `02 / X / AJS / 2026` (`{n} / {rom} / {code} / {yyyy}`), bisa diisi manual.
+- Dari detail transaksi bisa cetak **Invoice, Surat Jalan, dan SPP**.
+
+## Template dokumen
+
+Pengaturan > **Template dokumen** memilih tampilan invoice, surat jalan, dan SPP per toko:
+
+| Template | Keterangan |
+|---|---|
+| **Bawaan** | Invoice mengikuti layout *Nota Penjualan* (judul tengah, tabel header warna aksen, Tanda Terima / Hormat Kami, kotak catatan). Surat jalan dan permohonan pembayaran bawaan tetap ada. |
+| **Ardana** | Logo toko, ornamen kanan atas, strip bawah, nomor telepon, ucapan terima kasih. Surat jalan, invoice, dan SPP bergaya CV Ardana Jaya Sejahtera. |
+
+Isi dokumen (kontrak, no. SP, jatuh tempo, rekening, pajak, terbilang, penandatangan) sama di semua template.
+
+**Toko CV Ardana Jaya Sejahtera** sudah disiapkan: jalankan `npm run seed:ardana` (membuat toko kode `AJS` dengan identitas, rekening, penandatangan, dan gambar ornamen dari `assets/ardana/`). Pilih toko itu di dropdown, lalu tambahkan barang dan pelanggan.
+
+**Memakai template Ardana di toko lain:**
+1. Buka toko tersebut (dropdown Toko aktif), lalu Pengaturan > Identitas: isi nama, alamat, telepon, logo, rekening, nama dan jabatan penandatangan.
+2. Pengaturan > Template dokumen: pilih **Ardana**, atur warna aksen/kedua, lalu unggah gambar *ornamen kanan atas*, *strip bawah*, dan *ikon telepon* (PNG transparan; tanpa gambar, template tetap jalan tanpa ornamen).
+3. Simpan. Cara cepat: saat membuat toko baru, pilih *Salin pengaturan dari* toko Ardana, lalu ganti identitas dan gambarnya.
+
+Kalau ingin ornamen Ardana hanya untuk Ardana, cukup jangan menyalinnya ke toko lain; toko lain tetap memakai template Bawaan.
+
+## Backup dan restore
+
+Menu **Backup & Restore** (owner): unduh satu file `.json.gz` berisi seluruh data semua toko (termasuk pengguna, pengaturan, logo, gambar template). Restore **mengganti seluruh isi database** dengan file backup, wajib mengetik `RESTORE`, dan secara bawaan mengunduh backup pengaman dulu. File bisa dipindah antar Postgres dan MySQL. Di Vercel batas unggah sekitar 4,5 MB; untuk database besar jalankan restore dari server lokal.
+
 ## Tampilan gelap dan bar progres
 
 - Tombol **Gelap/Terang** ada di layar masuk, panel admin (kiri bawah), dan layar kasir (atas). Pintasan `Alt+T`. Default mengikuti pengaturan sistem; pilihan disimpan di browser.
@@ -105,7 +153,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-72 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF.
+126 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan custom (3 mode pajak, piutang, void), template dokumen, backup dan restore.
 
 ## Struktur
 
@@ -114,5 +162,6 @@ src/db/        adapter Postgres / MySQL dan skema (sql/schema.sql)
 src/routes/    API (auth, barang, penjualan, pembelian, opname, laporan, dokumen)
 src/services/  stok, pengaturan, PDF, barcode
 public/        index (login), pos.html (kasir), admin.html (panel owner)
-scripts/       init-db, seed
+scripts/       init-db, seed, seed-ardana
+assets/ardana  gambar template Ardana (dipakai seed-ardana)
 ```

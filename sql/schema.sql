@@ -1,7 +1,20 @@
 -- Token: {{ID}} {{TS}} {{LONGTEXT}} diganti sesuai dialek (pg / mysql) oleh src/db/schema.js
-CREATE TABLE IF NOT EXISTS settings (
+CREATE TABLE IF NOT EXISTS app_meta (
   k VARCHAR(64) PRIMARY KEY,
-  v {{LONGTEXT}}
+  v VARCHAR(200)
+);
+CREATE TABLE IF NOT EXISTS stores (
+  id {{ID}},
+  code VARCHAR(12) NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  active SMALLINT NOT NULL DEFAULT 1,
+  created_at {{TS}} NOT NULL
+);
+CREATE TABLE IF NOT EXISTS store_settings (
+  store_id BIGINT NOT NULL,
+  k VARCHAR(64) NOT NULL,
+  v {{LONGTEXT}},
+  PRIMARY KEY (store_id, k)
 );
 CREATE TABLE IF NOT EXISTS counters (
   k VARCHAR(64) PRIMARY KEY,
@@ -14,14 +27,17 @@ CREATE TABLE IF NOT EXISTS users (
   role VARCHAR(10) NOT NULL DEFAULT 'kasir',
   password_hash VARCHAR(100) NOT NULL,
   active SMALLINT NOT NULL DEFAULT 1,
+  store_id BIGINT,
   created_at {{TS}} NOT NULL
 );
 CREATE TABLE IF NOT EXISTS categories (
   id {{ID}},
-  name VARCHAR(100) NOT NULL UNIQUE
+  store_id BIGINT NOT NULL DEFAULT 1,
+  name VARCHAR(100) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS suppliers (
   id {{ID}},
+  store_id BIGINT NOT NULL DEFAULT 1,
   name VARCHAR(150) NOT NULL,
   contact VARCHAR(100),
   phone VARCHAR(40),
@@ -33,6 +49,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 CREATE TABLE IF NOT EXISTS customers (
   id {{ID}},
+  store_id BIGINT NOT NULL DEFAULT 1,
   name VARCHAR(150) NOT NULL,
   phone VARCHAR(40),
   email VARCHAR(100),
@@ -43,7 +60,8 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 CREATE TABLE IF NOT EXISTS products (
   id {{ID}},
-  sku VARCHAR(50) NOT NULL UNIQUE,
+  store_id BIGINT NOT NULL DEFAULT 1,
+  sku VARCHAR(50) NOT NULL,
   barcode VARCHAR(60),
   name VARCHAR(200) NOT NULL,
   category_id BIGINT REFERENCES categories(id),
@@ -72,7 +90,16 @@ CREATE TABLE IF NOT EXISTS stock_moves (
 );
 CREATE TABLE IF NOT EXISTS sales (
   id {{ID}},
-  sale_no VARCHAR(30) NOT NULL UNIQUE,
+  store_id BIGINT NOT NULL DEFAULT 1,
+  sale_no VARCHAR(40) NOT NULL,
+  kind VARCHAR(10) NOT NULL DEFAULT 'POS',
+  doc_date DATE,
+  contract_no VARCHAR(80),
+  contract_date DATE,
+  po_ref VARCHAR(80),
+  tax_mode VARCHAR(8),
+  tax_rate DECIMAL(6,2) NOT NULL DEFAULT 0,
+  spp_to VARCHAR(300),
   created_at {{TS}} NOT NULL,
   user_id BIGINT NOT NULL REFERENCES users(id),
   customer_id BIGINT REFERENCES customers(id),
@@ -104,7 +131,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
 );
 CREATE TABLE IF NOT EXISTS purchases (
   id {{ID}},
-  po_no VARCHAR(30) NOT NULL UNIQUE,
+  store_id BIGINT NOT NULL DEFAULT 1,
+  po_no VARCHAR(30) NOT NULL,
   created_at {{TS}} NOT NULL,
   date DATE NOT NULL,
   due_date DATE,
@@ -133,7 +161,8 @@ CREATE TABLE IF NOT EXISTS purchase_items (
 );
 CREATE TABLE IF NOT EXISTS goods_receipts (
   id {{ID}},
-  gr_no VARCHAR(30) NOT NULL UNIQUE,
+  store_id BIGINT NOT NULL DEFAULT 1,
+  gr_no VARCHAR(30) NOT NULL,
   created_at {{TS}} NOT NULL,
   date DATE NOT NULL,
   purchase_id BIGINT NOT NULL REFERENCES purchases(id),
@@ -155,7 +184,8 @@ CREATE TABLE IF NOT EXISTS goods_receipt_items (
 );
 CREATE TABLE IF NOT EXISTS opnames (
   id {{ID}},
-  opname_no VARCHAR(30) NOT NULL UNIQUE,
+  store_id BIGINT NOT NULL DEFAULT 1,
+  opname_no VARCHAR(30) NOT NULL,
   created_at {{TS}} NOT NULL,
   date DATE NOT NULL,
   note VARCHAR(300),

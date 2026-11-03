@@ -1,5 +1,6 @@
 .shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
 .side { background: var(--side); border-right: 1px solid var(--line); padding: 22px 14px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
+.storebox { padding: 0 8px 14px; } .storebox select { padding: 5px 8px; font-size: 13px; }
 .side .brand { font-family: var(--serif); font-size: 20px; letter-spacing: -.02em; color: var(--ink); padding: 0 8px 18px; display: flex; align-items: center; gap: 8px; line-height: 1.15; }
 .brand-logo { max-height: 30px; max-width: 60px; }
 #nav { flex: 1; }

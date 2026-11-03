@@ -8,9 +8,9 @@ const like = (q) => `%${String(q).toLowerCase().replace(/[%_\\]/g, '')}%`;
 const ymd = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? s : null);
 
 // Nomor dokumen harian: PREFIX-YYYYMMDD-0001
-async function nextNo(t, prefix, date) {
+async function nextNo(t, sid, prefix, date) {
   const d = (date || db.today()).replace(/-/g, '');
-  const n = await t.nextCounter(`${prefix}-${d}`);
+  const n = await t.nextCounter(`${sid}:${prefix}-${d}`);
   return `${prefix}-${d}-${String(n).padStart(4, '0')}`;
 }
 // Rentang tanggal -> [from 00:00:00, to+1 00:00:00)

@@ -1,32 +1,7 @@
 // Dokumen PDF A4: Invoice, Surat Jalan, Permohonan Pembayaran (penjualan & pembelian).
 const PDFDocument = require('pdfkit');
-const path = require('path');
-// Font ditanam (TTF) supaya tidak bergantung pada standard-fonts pdfkit yang tidak ikut ter-bundle di Vercel
-const F = (n) => path.join(__dirname, '../../fonts', n);
 
-const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-const rp = (n) => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
-const qtyf = (n) => (Number(n) || 0).toLocaleString('id-ID', { maximumFractionDigits: 3 });
-const tgl = (s) => { if (!s) return '-'; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${+d} ${BULAN[+m - 1]} ${y}`; };
-
-const SAT = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
-function tb(n) {
-  n = Math.floor(n);
-  if (n < 12) return SAT[n];
-  if (n < 20) return tb(n - 10) + ' belas';
-  if (n < 100) return tb(Math.floor(n / 10)) + ' puluh' + (n % 10 ? ' ' + tb(n % 10) : '');
-  if (n < 200) return 'seratus' + (n > 100 ? ' ' + tb(n - 100) : '');
-  if (n < 1000) return tb(Math.floor(n / 100)) + ' ratus' + (n % 100 ? ' ' + tb(n % 100) : '');
-  if (n < 2000) return 'seribu' + (n > 1000 ? ' ' + tb(n - 1000) : '');
-  if (n < 1e6) return tb(Math.floor(n / 1e3)) + ' ribu' + (n % 1e3 ? ' ' + tb(n % 1e3) : '');
-  if (n < 1e9) return tb(Math.floor(n / 1e6)) + ' juta' + (n % 1e6 ? ' ' + tb(n % 1e6) : '');
-  if (n < 1e12) return tb(Math.floor(n / 1e9)) + ' miliar' + (n % 1e9 ? ' ' + tb(n % 1e9) : '');
-  return tb(Math.floor(n / 1e12)) + ' triliun' + (n % 1e12 ? ' ' + tb(n % 1e12) : '');
-}
-function terbilang(n) {
-  const s = Math.round(Number(n) || 0) === 0 ? 'nol' : tb(Math.abs(Math.round(n)));
-  return s.charAt(0).toUpperCase() + s.slice(1) + ' rupiah';
-}
+const { F, rp, qtyf, tgl, terbilang, hex, taxLabel, refRows } = require('./pdf-util');
 
 const M = 45; // margin
 const INK = '#111111'; const MUTED = '#787774'; const LINE = '#cfcfcc'; const BAND = '#f3f2ee';
@@ -59,8 +34,8 @@ function table(doc, cols, rows, o = {}) {
   const pad = 4; const fs = o.fontSize || 9;
   const head = () => {
     const y = doc.y; const h = 20;
-    doc.rect(M, y, W, h).fill(BAND);
-    doc.fillColor(INK).font('Helvetica-Bold').fontSize(fs);
+    doc.rect(M, y, W, h).fill(o.accent || BAND);
+    doc.fillColor(o.accent ? '#ffffff' : INK).font('Helvetica-Bold').fontSize(fs);
     let x = M;
     for (const c of cols) { doc.text(c.label, x + pad, y + 6, { width: c.w - 2 * pad, align: c.align || 'left', lineBreak: false }); x += c.w; }
     doc.moveTo(M, y + h).lineTo(M + W, y + h).lineWidth(0.6).strokeColor(INK).stroke();
@@ -75,6 +50,7 @@ function table(doc, cols, rows, o = {}) {
     doc.fillColor(INK);
     for (const c of cols) { doc.text(String(r[c.key] ?? ''), x + pad, y + 3, { width: c.w - 2 * pad, align: c.align || 'left' }); x += c.w; }
     doc.moveTo(M, y + h).lineTo(M + W, y + h).lineWidth(0.3).strokeColor(LINE).stroke();
+    if (o.grid) { let gx = M; for (let k = 0; k <= cols.length; k++) { doc.moveTo(gx, y).lineTo(gx, y + h).lineWidth(0.3).strokeColor(LINE).stroke(); gx += (cols[k] || {}).w || 0; } }
     doc.y = y + h;
   }
   doc.moveDown(0.5);
@@ -139,23 +115,62 @@ const FOOTER = (doc, s, d) => {
   }
 };
 
-function invoice(doc, s, d) {
-  title(doc, d.titles.invoice, d.no);
-  partyBlock(doc, d);
-  const rows = d.items.map((i, n) => ({ n: n + 1, name: i.name + (i.sku ? `\n${i.sku}` : ''), qty: qtyf(i.qty) + ' ' + (i.unit || ''), price: rp(i.price), disc: i.discount ? rp(i.discount) : '-', total: rp(i.total) }));
-  table(doc, [{ key: 'n', label: 'No', w: 28 }, { key: 'name', label: 'Nama Barang' }, { key: 'qty', label: 'Qty', w: 62, align: 'right' }, { key: 'price', label: 'Harga', w: 72, align: 'right' }, { key: 'disc', label: 'Diskon', w: 60, align: 'right' }, { key: 'total', label: 'Jumlah', w: 80, align: 'right' }], rows);
-  const t = [['Subtotal', rp(d.subtotal)]];
+// Invoice bawaan: mengikuti layout "Nota Penjualan" (judul tengah, tabel header warna aksen, Tanda Terima / Hormat Kami)
+function invoice(doc, s, d, logo) {
+  const accent = hex(s.doc_accent, '#E8710A');
+  const W = doc.page.width - 2 * M;
+  const y0 = M; let x = M;
+  if (logo) { try { doc.image(logo, M, y0, { fit: [66, 66] }); } catch (_) {} }
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text(d.titles.invoice, M, y0 + 2, { width: W, align: 'center' });
+  doc.fontSize(11.5).text(s.store_name, M, doc.y + 1, { width: W, align: 'center' });
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED);
+  const addr = [s.address, s.city].filter(Boolean).join(', ');
+  if (addr) doc.text(addr, M, doc.y, { width: W, align: 'center' });
+  const contact = [s.phone && 'Telp. ' + s.phone, s.email, s.npwp && 'NPWP ' + s.npwp].filter(Boolean).join('  |  ');
+  if (contact) doc.text(contact, M, doc.y, { width: W, align: 'center' });
+  const yl = Math.max(doc.y, y0 + 68) + 6;
+  doc.moveTo(M, yl).lineTo(M + W, yl).lineWidth(1.4).strokeColor(INK).stroke();
+  doc.moveTo(M, yl + 2.5).lineTo(M + W, yl + 2.5).lineWidth(0.4).strokeColor(INK).stroke();
+  doc.y = yl + 12; doc.x = M;
+  // identitas: kiri (No, Nama, alamat, kontrak) | kanan (Tanggal, jatuh tempo)
+  const ym = doc.y; const wl = W * 0.6;
+  const left = [['No', d.no], [d.side === 'purchase' ? 'Pemasok' : 'Nama', d.party.name]];
+  if (d.party.address) left.push(['Alamat', d.party.address]);
+  left.push(...refRows(d));
+  kv(doc, left, M, wl, 92);
+  const yEndL = doc.y; doc.y = ym;
+  const right = [['Tanggal', tgl(d.date)]];
+  if (d.due_date) right.push(['Jatuh Tempo', tgl(d.due_date)]);
+  kv(doc, right, M + W * 0.62, W * 0.38, 70);
+  doc.y = Math.max(yEndL, doc.y) + 8; doc.x = M;
+
+  const anyDisc = d.items.some((i) => i.discount);
+  const rows = d.items.map((i, n) => ({ n: n + 1, name: i.name, qty: qtyf(i.qty) + ' ' + (i.unit || ''), price: rp(i.price), disc: i.discount ? rp(i.discount) : '-', total: rp(i.total) }));
+  const cols = [{ key: 'n', label: 'NO', w: 30, align: 'center' }, { key: 'name', label: 'NAMA BARANG' }, { key: 'qty', label: 'JUMLAH', w: 70, align: 'center' }, { key: 'price', label: 'HARGA SATUAN', w: 88, align: 'right' }];
+  if (anyDisc) cols.push({ key: 'disc', label: 'DISKON', w: 65, align: 'right' });
+  cols.push({ key: 'total', label: 'TOTAL', w: 92, align: 'right' });
+  table(doc, cols, rows, { accent, grid: true });
+
+  const t = [];
+  if (d.tax || d.discount) t.push(['Sub Total', rp(d.subtotal)]);
   if (d.discount) t.push(['Diskon', '- ' + rp(d.discount)]);
-  if (d.tax) t.push([s.tax_label + (s.tax_inclusive ? ' (termasuk)' : ''), rp(d.tax)]);
-  t.push(['TOTAL', rp(d.total), true]);
-  if (d.paid) t.push(['Dibayar', rp(d.paid)]);
-  if (d.paid && d.total - d.paid > 0) t.push(['Sisa tagihan', rp(d.total - d.paid), true]);
+  if (d.tax) t.push([taxLabel(s, d), rp(d.tax)]);
+  t.push([d.tax || d.discount ? 'TOTAL' : 'JUMLAH', rp(d.total), true]);
+  if (d.paid && d.paid < d.total) { t.push(['Dibayar', rp(d.paid)]); t.push(['Sisa tagihan', rp(d.total - d.paid), true]); }
+  const yTot = doc.y;
   totalsBox(doc, t);
-  doc.font('Helvetica-Oblique').fontSize(9).fillColor(INK).text('Terbilang: ' + terbilang(d.total), M, doc.y, { width: doc.page.width - 2 * M });
-  doc.moveDown(0.6);
+  // catatan di kiri (kotak merah) sejajar total
+  const note = s.doc_note || '* Barang yang sudah dibeli tidak bisa ditukar atau dikembalikan';
+  const yAfter = doc.y;
+  doc.font('Helvetica').fontSize(8);
+  const nh = doc.heightOfString(note, { width: 200 }) + 10;
+  doc.roundedRect(M, yTot + 2, 215, nh, 6).lineWidth(0.8).strokeColor('#D32F2F').stroke();
+  doc.fillColor('#333333').text(note, M + 8, yTot + 7, { width: 200 });
+  doc.y = Math.max(yAfter, yTot + nh + 6); doc.x = M;
+  doc.font('Helvetica-Oblique').fontSize(9).fillColor(INK).text('Terbilang: ' + terbilang(d.total), M, doc.y, { width: W });
+  doc.moveDown(0.5);
   paymentInfo(doc, s, d);
-  if (s.doc_note) { doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(s.doc_note, M, doc.y, { width: doc.page.width - 2 * M }); doc.moveDown(0.4); }
-  signatures(doc, d.sig.invoice, [null, d.sig.invoice.length === 2 ? s.signer_name : null]);
+  signatures(doc, d.sig.invoice.length === 2 ? ['Tanda Terima', 'Hormat Kami'] : d.sig.invoice, [null, d.sig.invoice.length === 2 ? s.signer_name : null]);
 }
 function paymentInfo(doc, s, d) {
   if (d.side === 'purchase') return;
@@ -181,7 +196,7 @@ function paymentRequest(doc, s, d) {
   const W = doc.page.width - 2 * M;
   const owed = Math.max(d.total - d.paid, 0);
   title(doc, 'PERMOHONAN PEMBAYARAN', 'PP/' + d.no);
-  kv(doc, [['Tanggal', tgl(d.date)], ['Lampiran', '1 (satu) berkas ' + (d.side === 'sale' ? 'invoice' : 'rincian pembelian')], ['Perihal', 'Permohonan Pembayaran']], M, 300, 70);
+  kv(doc, [['Tanggal', tgl(d.date)], ['Lampiran', '1 (satu) berkas ' + (d.side === 'sale' ? 'invoice' : 'rincian pembelian')], ['Perihal', 'Permohonan Pembayaran'], ...refRows(d)], M, 330, 95);
   doc.moveDown(0.8);
   doc.font('Helvetica').fontSize(10).fillColor(INK).text('Kepada Yth.', M, doc.y);
   doc.font('Helvetica-Bold').text(d.side === 'sale' ? d.party.name : 'Bagian Keuangan', M, doc.y);
@@ -192,7 +207,7 @@ function paymentRequest(doc, s, d) {
   doc.text('Dengan hormat,', M, doc.y);
   doc.moveDown(0.4);
   const intro = d.side === 'sale'
-    ? `Bersama surat ini kami, ${s.store_name}, mengajukan permohonan pembayaran atas transaksi pembelian barang sebagaimana rincian berikut:`
+    ? `Bersama surat ini kami, ${s.store_name}, mengajukan permohonan pembayaran atas transaksi pembelian barang${d.po_ref ? ' sehubungan dengan Surat Pesanan ' + d.po_ref : ''}${d.contract_no ? ' (Kontrak No. ' + d.contract_no + ')' : ''} sebagaimana rincian berikut:`
     : `Bersama surat ini kami mengajukan permohonan agar dilakukan pembayaran kepada pemasok ${d.party.name} atas pembelian barang sebagaimana rincian berikut:`;
   doc.text(intro, M, doc.y, { width: W, align: 'justify', lineGap: 2 });
   doc.moveDown(0.7);
@@ -220,14 +235,17 @@ function paymentRequest(doc, s, d) {
 }
 
 const KINDS = { invoice, delivery, 'payment-request': paymentRequest };
-function render(kind, s, logo, d) {
-  const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true, font: F('Regular.ttf'), info: { Title: `${kind} ${d.no}`, Author: s.store_name } });
+// imgs: { logo, header, footer, icon } (Buffer). Template dipilih dari pengaturan toko (doc_template).
+function render(kind, s, imgs, d) {
+  const T = s.doc_template === 'ardana' ? require('./pdf-ardana') : null;
+  const doc = new PDFDocument({ size: 'A4', margin: T ? 0 : M, bufferPages: true, font: F('Regular.ttf'), info: { Title: `${kind} ${d.no}`, Author: s.store_name } });
   doc.registerFont('Helvetica', F('Regular.ttf'));
   doc.registerFont('Helvetica-Bold', F('Bold.ttf'));
   doc.registerFont('Helvetica-Oblique', F('Italic.ttf'));
-  letterhead(doc, s, logo);
   d.docTitle = { invoice: 'Invoice', delivery: 'Surat Jalan', 'payment-request': 'Permohonan Pembayaran' }[kind];
-  KINDS[kind](doc, s, d);
+  if (T) { T[kind](doc, s, d, imgs); doc.end(); return doc; }
+  if (kind !== 'invoice') letterhead(doc, s, imgs.logo);
+  KINDS[kind](doc, s, d, imgs.logo);
   FOOTER(doc, s, d);
   doc.end();
   return doc;

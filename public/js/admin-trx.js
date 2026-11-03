@@ -13,17 +13,18 @@
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. transaksi / pelanggan', grow: true }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
     actions: '<button data-act="export">Ekspor Excel</button>',
     url: (q) => '/api/sales?' + POS.qs(q),
-    cols: [{ h: 'No', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>` }, { h: 'Waktu', f: (r) => POS.dt(r.created_at) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || 'Umum') }, { h: 'Kasir', f: (r) => esc(r.cashier) }, { h: 'Metode', f: (r) => esc(POS.METHOD[r.method] || r.method) }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
+    cols: [{ h: 'No', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>${r.kind === 'CUSTOM' ? ' ' + A.tag('custom', 'blue') : ''}` }, { h: 'Waktu', f: (r) => POS.dt(r.created_at) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || 'Umum') }, { h: 'Kasir', f: (r) => esc(r.cashier) }, { h: 'Metode', f: (r) => esc(POS.METHOD[r.method] || r.method) }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
     onRow: (r, reload) => saleDetail(r.id, reload),
     onAct: (act, r, reload, b) => { if (act === 'export') { const q = b.closest('#view'); A.download(`/api/reports/sales_detail/excel?from=${$('[data-f=from]', q).value}&to=${$('[data-f=to]', q).value}`); } else saleDetail(r.id, reload); },
   }) });
   async function saleDetail(id, reload) {
     const s = await POS.get('/api/sales/' + id);
-    const m = A.dialog('Penjualan ' + s.sale_no, `${info([['Waktu', POS.dt(s.created_at)], ['Kasir', esc(s.cashier)], ['Pelanggan', esc(s.customer_name || 'Umum')], ['Metode', esc(POS.METHOD[s.method])], ['Jatuh tempo', s.due_date && POS.d(s.due_date)], ['Status', A.statusTag(s.status) + ' ' + A.payTag(s)]])}
+    const TAXM = { NONE: 'Tanpa pajak', EXCLUDE: 'Pajak ditambahkan', INCLUDE: 'Harga sudah termasuk pajak' };
+    const m = A.dialog('Penjualan ' + s.sale_no, `${info([['Jenis', s.kind === 'CUSTOM' ? 'Penjualan Custom' : ''], ['No. kontrak', s.contract_no && esc(s.contract_no)], ['Tanggal kontrak', s.contract_date && POS.d(s.contract_date)], ['No. surat pesanan', s.po_ref && esc(s.po_ref)], ['Pajak', s.kind === 'CUSTOM' ? esc(TAXM[s.tax_mode] || '') + (s.tax_mode && s.tax_mode !== 'NONE' ? ' ' + s.tax_rate + '%' : '') : ''], ['Waktu', POS.dt(s.created_at)], ['Kasir', esc(s.cashier)], ['Pelanggan', esc(s.customer_name || 'Umum')], ['Metode', esc(POS.METHOD[s.method])], ['Jatuh tempo', s.due_date && POS.d(s.due_date)], ['Status', A.statusTag(s.status) + ' ' + A.payTag(s)]])}
       ${A.table([{ h: 'Barang', f: (i) => esc(i.name) }, { h: 'Qty', cls: 'r mono', f: (i) => nf(i.qty) + ' ' + esc(i.unit || '') }, { h: 'Harga', cls: 'r mono', f: (i) => money(i.price) }, { h: 'Diskon', cls: 'r mono', f: (i) => (i.discount ? money(i.discount) : '') }, { h: 'Jumlah', cls: 'r mono', f: (i) => money(i.total) }], s.items)}
       <div style="margin-top:12px">${totalsBox(s)}</div>
       ${s.payments.length ? `<h3 style="margin:14px 0 6px;font-size:14px">Pembayaran</h3>${A.table([{ h: 'Waktu', f: (p) => POS.dt(p.created_at) }, { h: 'Metode', f: (p) => esc(p.method) }, { h: 'Catatan', f: (p) => esc(p.note || '') }, { h: 'Nominal', cls: 'r mono', f: (p) => money(p.amount) }], s.payments)}` : ''}`,
-      { footer: `<button data-r>Cetak struk</button>${s.status === 'DONE' ? docBtns('sale', s.id, s.outstanding) : ''}<span style="flex:1"></span>${s.status === 'DONE' && s.outstanding > 0 ? '<button class="primary" data-pay>Terima pembayaran</button>' : ''}${s.status === 'DONE' ? '<button class="danger" data-void>Batalkan</button>' : ''}<button data-x>Tutup</button>` });
+      { footer: `${s.kind === 'CUSTOM' ? '' : '<button data-r>Cetak struk</button>'}${s.status === 'DONE' ? docBtns('sale', s.id, s.outstanding) : ''}<span style="flex:1"></span>${s.status === 'DONE' && s.outstanding > 0 ? '<button class="primary" data-pay>Terima pembayaran</button>' : ''}${s.status === 'DONE' ? '<button class="danger" data-void>Batalkan</button>' : ''}<button data-x>Tutup</button>` });
     bindDocs(m, 'sale', s.id);
     m.el.addEventListener('click', (e) => { if (e.target.closest('[data-r]')) POS.printReceipt(s, A.ST); });
     m.el.querySelector('[data-pay]') && (m.el.querySelector('[data-pay]').onclick = async () => {
@@ -214,4 +215,5 @@
     });
     $('#rp_xl', el).onclick = () => A.download(`/api/reports/${cur.id}/excel?${qs()}`);
   } });
+  Object.assign(A, { saleDetail, totalsBox, info, docBtns, bindDocs });
 })();

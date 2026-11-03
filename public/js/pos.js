@@ -10,8 +10,13 @@
 
   // ---------- Muat data ----------
   try {
-    [ME, ST] = await Promise.all([POS.get('/api/auth/me'), POS.get('/api/settings')]);
+    ME = await POS.me(); ST = await POS.get('/api/settings');
   } catch (e) { return; }
+  if (ME.role === 'owner' && ME.stores.length > 1) {
+    const sel = $('#storeSel'); sel.classList.remove('hidden');
+    sel.innerHTML = ME.stores.map((s) => `<option value="${s.id}" ${s.id === ME.store.id ? 'selected' : ''}>${POS.esc(s.name)}</option>`).join('');
+    sel.onchange = async (e) => { if (S.cart.length && !(await POS.confirm('Keranjang masih berisi barang. Pindah toko?', 'Pindah', true))) { sel.value = ME.store.id; return; } POS.setStore(e.target.value); location.reload(); };
+  }
   document.title = 'Kasir - ' + ST.store_name;
   $('#brand').innerHTML = POS.brand(ST);
   $('#who').textContent = ME.name;
@@ -330,7 +335,7 @@
     });
     m.el.addEventListener('click', (e) => { if (e.target.closest('[data-n]')) m.close(); });
   }
-  const openDoc = (kind, id) => window.open(`/api/docs/${kind}/sale/${id}`, '_blank');
+  const openDoc = (kind, id) => window.open(POS.su(`/api/docs/${kind}/sale/${id}`), '_blank');
 
   // ---------- Riwayat ----------
   async function history() {

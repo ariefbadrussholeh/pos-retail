@@ -10,8 +10,8 @@
   const debounce = (f, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; };
   A.debounce = debounce;
   A.head = (title, sub, acts = '') => `<div class="ph"><div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}</div><div class="acts">${acts}</div></div>`;
-  A.openDoc = (kind, type, id) => window.open(`/api/docs/${kind}/${type}/${id}`, '_blank');
-  A.download = (url) => { const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); };
+  A.openDoc = (kind, type, id) => window.open(POS.su(`/api/docs/${kind}/${type}/${id}`), '_blank');
+  A.download = (url) => { const a = document.createElement('a'); a.href = POS.su(url); a.download = ''; document.body.appendChild(a); a.click(); a.remove(); };
   A.guard = async (f) => { try { return await f(); } catch (e) { toast(e.message, 'err'); } };
 
   // ---------- Router ----------
@@ -174,10 +174,17 @@
   };
 
   // ---------- Awal ----------
+  // Pemilih toko di sidebar: pindah toko = muat ulang halaman dengan toko baru
+  A.renderStoreBox = () => {
+    const sb = $('#storebox'); if (!sb) return;
+    sb.innerHTML = `<label class="f" for="storeSel">Toko aktif</label><select id="storeSel">${A.ME.stores.map((s) => `<option value="${s.id}" ${s.id === A.ME.store.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})${s.active ? '' : ' - nonaktif'}</option>`).join('')}</select>`;
+    $('#storeSel').onchange = (e) => { POS.setStore(e.target.value); location.hash = location.hash.startsWith('#/dashboard') ? location.hash : '#/dashboard'; location.reload(); };
+  };
   A.refreshBrand = () => { $('#brand').innerHTML = POS.brand(A.ST); };
   A.init = async function () {
-    try { [A.ME, A.ST] = await Promise.all([POS.get('/api/auth/me'), POS.get('/api/settings')]); } catch (_) { return; }
+    try { A.ME = await POS.me(); A.ST = await POS.get('/api/settings'); } catch (_) { return; }
     if (A.ME.role !== 'owner') { location.href = '/pos.html'; return; }
+    A.renderStoreBox();
     A.refreshBrand(); $('#meName').textContent = A.ME.name; $('#meRole').textContent = 'Owner';
     $('#out').onclick = async () => { await POS.post('/api/auth/logout'); location.href = '/'; };
     $('#menu').onclick = () => $('#side').classList.toggle('open');
