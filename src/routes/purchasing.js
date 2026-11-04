@@ -61,7 +61,7 @@ purchases.get('/:id', wrap(async (req, res) => {
 async function save(req, id) {
   const b = req.body || {};
   return db.tx(async (t) => {
-    if (!(await t.one('SELECT id FROM suppliers WHERE id = ? AND store_id = ?', [+b.supplier_id, req.sid]))) throw err(400, 'Pilih pemasok');
+    if (!(await t.one('SELECT id FROM suppliers WHERE id = ?', [+b.supplier_id]))) throw err(400, 'Pilih pemasok');
     const { lines, subtotal } = await buildLines(t, req.sid, b.items);
     const tt = totals(subtotal, b);
     const date = ymd(b.date) || t.today();
@@ -155,7 +155,7 @@ receipts.post('/', wrap(async (req, res) => {
       }
     } else {
       supplierId = +b.supplier_id;
-      if (!(await t.one('SELECT id FROM suppliers WHERE id = ? AND store_id = ?', [supplierId, req.sid]))) throw err(400, 'Pilih pemasok');
+      if (!(await t.one('SELECT id FROM suppliers WHERE id = ?', [supplierId]))) throw err(400, 'Pilih pemasok');
       const { lines: bl, subtotal } = await buildLines(t, req.sid, (b.items || []).filter((i) => num(i.qty) > 0));
       pid = await t.insert('purchases', { store_id: req.sid, po_no: await nextNo(t, req.sid, 'PO', date), created_at: t.now(), date, due_date: ymd(b.due_date), supplier_id: supplierId, supplier_ref: b.supplier_do ? String(b.supplier_do).slice(0, 60) : null, subtotal, discount: 0, tax: 0, total: subtotal, paid: 0, status: 'OPEN', note: 'Dibuat otomatis dari penerimaan langsung', user_id: req.user.id });
       for (const l of bl) {

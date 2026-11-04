@@ -1,6 +1,7 @@
-// Pemeriksaan fitur 1.3: multi toko, penjualan custom, template dokumen, backup & restore.
+// Pemeriksaan fitur 1.3-1.4: multi toko, penjualan INAPROC (+dokumen), template dokumen, pelanggan bersama, backup & restore.
 const zlib = require('zlib');
 module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   // ---- multi toko
   const s1 = (await A.get('/api/auth/me')); assert.equal(s1.store.id, 1); assert.equal(s1.stores.length, 1); ok('toko pertama otomatis dibuat dan dipilih');
   assert.equal((await K.get('/api/stores')).code, 403); ok('kasir tidak bisa kelola toko');
@@ -37,7 +38,8 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await KB.post('/api/sales', { items: [{ product_id: (await K.get('/api/products/catalog'))[0].id, qty: 1 }], method: 'TUNAI', paid: 99999 })).code, 400); ok('kasir tidak bisa jual barang toko lain');
   assert.equal((await A.get('/api/products/' + pB.id)).stock, 497); ok('stok toko B berkurang');
 
-  // ---- penjualan custom
+  // ---- penjualan INAPROC
+  const cus1 = (await A.get('/api/customers?q=berkah')).rows[0].id;
   const cu = await A.post('/api/customers', { name: 'UPT Puskesmas Talang', address: 'Jl. Raya Sumenep, Pamekasan' }); assert.equal(cu.code, 201);
   const items = [{ product_id: pB.id, qty: 100, price: 16000 }, { product_id: pB2.id, qty: 100, price: 27000, name: 'Plastik Sampah Hitam Ukuran 90x120', unit: 'Pak' }];
   assert.equal((await A.get('/api/invoices/next-no?date=2026-10-08')).no, '01 / X / AJS / 2026'); ok('pratinjau nomor mengikuti format toko');
@@ -54,13 +56,35 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await A.post('/api/invoices', { ...base1, doc_no: '02 / X / AJS / 2026' })).code, 409); ok('nomor dokumen dobel ditolak');
   assert.equal((await A.post('/api/invoices', { ...base1, customer_id: '' })).code, 400); ok('custom wajib pelanggan');
   assert.equal((await A.post('/api/invoices', { ...base1, paid: 99999999 })).code, 400); ok('pembayaran melebihi total ditolak');
-  assert.equal((await A.post('/api/invoices', { ...base1, customer_id: 1 })).code, 400); ok('pelanggan toko lain ditolak');
+  assert.equal((await A.get('/api/customers/' + cus1)).name, 'CV Berkah Abadi'); const nB = (await A.get('/api/customers')).total; A.h['x-store'] = '1'; assert.equal((await A.get('/api/customers')).total, nB); A.h['x-store'] = String(B); ok('pelanggan milik bersama (terlihat di semua toko)');
+  assert.equal((await A.post('/api/suppliers', { name: 'Pemasok bersama' })).code, 201); A.h['x-store'] = '1'; assert.equal((await A.get('/api/suppliers?q=bersama')).total, 1); A.h['x-store'] = String(B); ok('pemasok milik bersama');
+  assert.equal((await A.post('/api/invoices', { ...base1, customer_id: cus1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1 }] })).code, 201); ok('pelanggan toko lain boleh dipakai di INAPROC');
   assert.equal((await K.post('/api/invoices', base1)).code, 403); ok('kasir tidak bisa penjualan custom');
-  const lst = await A.get('/api/sales?kind=CUSTOM&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, 3); ok('daftar penjualan custom');
+  const lst = await A.get('/api/sales?kind=CUSTOM&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, 4); ok('daftar penjualan custom');
   const pay = await A.post(`/api/sales/${i1.id}/payments`, { amount: 1000000, method: 'TRANSFER' }); assert.equal(pay.outstanding, 3773000); ok('custom: cicilan piutang lewat menu yang sama');
   const rcv = await A.get('/api/reports/receivables'); assert.equal(rcv.rows.some((r) => r.sale_no === i1.sale_no), true); ok('custom masuk laporan piutang');
   const rep = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rep.rows[0] && rep.rows[0].total >= 4773000); ok('custom masuk laporan penjualan (tanggal dokumen)');
-  const v = await A.post(`/api/sales/${i2.id}/void`, { reason: 'uji' }); assert.equal(v.status, 'VOID'); assert.equal((await A.get('/api/products/' + pB.id)).stock, 396); ok('batal custom mengembalikan stok');
+  const v = await A.post(`/api/sales/${i2.id}/void`, { reason: 'uji' }); assert.equal(v.status, 'VOID'); assert.equal((await A.get('/api/products/' + pB.id)).stock, 395); ok('batal custom mengembalikan stok');
+
+  // ---- dokumen pendukung INAPROC
+  const dts = await A.get('/api/doc-types'); assert.ok(dts.rows.length >= 5 && dts.rows[0].name.includes('Surat Pesanan')); ok('master dokumen terisi jenis awal');
+  const dtN = await A.post('/api/doc-types', { name: 'BA Pemeriksaan' }); assert.equal(dtN.code, 201);
+  A.h['x-store'] = '1'; assert.equal((await A.get('/api/doc-types')).rows.length, dts.rows.length + 1); A.h['x-store'] = String(B); ok('master dokumen milik bersama');
+  const up = (id, q, body, hdr = {}) => fetch(`${base}/api/invoices/${id}/docs?${new URLSearchParams(q)}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream', cookie: A.cookie(), 'x-store': A.h['x-store'], ...hdr }, body });
+  const pdfBytes = Buffer.from('%PDF-1.4\n' + 'x'.repeat(2000)); const imgBytes = Buffer.from(PNG.split(',')[1], 'base64');
+  const d1 = await up(i1.id, { name: 'SP.pdf', title: 'Surat Pesanan EP-01', type_id: dts.rows[0].id }, pdfBytes); assert.equal(d1.status, 201); const d1j = await d1.json();
+  const d2 = await up(i1.id, { name: 'foto bast.png', title: 'Foto serah terima' }, imgBytes); assert.equal(d2.status, 201); assert.equal((await d2.json()).type_name, null);
+  const d3 = await up(i1.id, { name: 'kontrak.docx', title: 'Kontrak', type_id: dtN.id }, Buffer.from('docx')); assert.equal(d3.status, 201); const d3j = await d3.json(); ok('unggah banyak dokumen (jenis dari master dan "Lainnya")');
+  assert.equal((await A.get(`/api/invoices/${i1.id}/docs`)).rows.length, 3);
+  const dl = await A.get(`/api/invoices/${i1.id}/docs/${d1j.id}/file`, true); assert.equal(dl.status, 200); assert.equal(dl.headers.get('content-type'), 'application/pdf'); assert.ok(Buffer.from(await dl.arrayBuffer()).equals(pdfBytes)); ok('unduh dokumen sama persis dengan yang diunggah');
+  assert.equal((await up(i1.id, { name: 'x.pdf', title: '' }, pdfBytes)).status, 400); assert.equal((await up(i1.id, { name: 'x.exe', title: 'Virus' }, pdfBytes)).status, 400); assert.equal((await up(i1.id, { name: 'x.pdf', title: 'T', type_id: 99999 }, pdfBytes)).status, 400); ok('judul wajib, jenis berkas dan jenis dokumen divalidasi');
+  assert.equal((await up(i1.id, { name: 'besar.pdf', title: 'Besar' }, Buffer.alloc(4 * 1024 * 1024 + 10))).status, 413); ok('berkas > 4 MB ditolak');
+  assert.equal((await A.put(`/api/invoices/${i1.id}/docs/${d1j.id}`, { title: 'SP (revisi)' })).ok, true); assert.equal((await A.get(`/api/invoices/${i1.id}/docs`)).rows[0].title, 'SP (revisi)'); ok('ubah judul dokumen');
+  assert.equal((await A.del(`/api/doc-types/${dts.rows[0].id}`)).code, 409); ok('jenis dokumen yang dipakai tidak bisa dihapus');
+  const rp1 = await up(saleB.id, { name: 'a.pdf', title: 'A' }, pdfBytes); assert.equal(rp1.status, 404); ok('dokumen hanya untuk penjualan INAPROC');
+  A.h['x-store'] = '1'; assert.equal((await A.get(`/api/invoices/${i1.id}/docs`)).code, 404); A.h['x-store'] = String(B); ok('dokumen toko lain tidak bisa dibuka');
+  assert.equal((await K.get(`/api/invoices/${i1.id}/docs`)).code, 403); ok('kasir tidak bisa akses dokumen');
+  assert.equal((await A.del(`/api/invoices/${i1.id}/docs/${d3j.id}`)).ok, true); assert.equal((await A.get(`/api/invoices/${i1.id}/docs`)).rows.length, 2); ok('hapus dokumen');
 
   // ---- template dokumen
   for (const tpl of ['default', 'ardana']) {
@@ -71,11 +95,15 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
     }
     ok(`3 PDF custom dengan template ${tpl}`);
   }
-  assert.equal((await A.put('/api/settings', { doc_template: 'xxx' })).code, 400); assert.equal((await A.put('/api/settings', { doc_accent: 'merah' })).code, 400); assert.equal((await A.put('/api/settings', { doc_no_format: 'tanpa nomor' })).code, 400); ok('validasi template, warna, format nomor');
-  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-  assert.equal((await A.put('/api/settings', { tpl_header: PNG, tpl_footer: PNG, tpl_phone_icon: PNG, logo: PNG, doc_template: 'ardana' })).tpl_header, PNG);
-  assert.equal((await A.get(`/api/docs/invoice/sale/${i1.id}`, true)).status, 200); ok('gambar template tersimpan dan dipakai di PDF');
-  assert.equal((await A.put('/api/settings', { tpl_header: 'data:image/webp;base64,AAAA' })).code, 400); ok('gambar template hanya PNG/JPEG');
+  assert.equal((await A.put('/api/settings', { doc_template: 'xxx' })).code, 400); ok('template tidak dikenal ditolak');
+  const tl = await A.get('/api/settings/templates'); assert.deepEqual(tl.map((t) => t.id), ['default', 'ardana']); ok('daftar template berasal dari src/templates');
+  const rm = await A.put('/api/settings', { doc_accent: '#000000', doc_no_format: 'x', tpl_header: 'x', doc_template: 'ardana' }); assert.equal(rm.doc_accent, undefined); assert.equal(rm.tpl_header, undefined); ok('opsi warna/gambar/format nomor sudah dihapus');
+  const cuS = await A.put('/api/customers/' + cu.id, { spp_to: 'Kepala UPT Puskesmas Talang\nJl. Raya Sumenep No. 1' }); assert.equal(cuS.spp_to, 'Kepala UPT Puskesmas Talang\nJl. Raya Sumenep No. 1'); ok('alamat tujuan SPP di master pelanggan');
+  try {
+    const { execFileSync } = require('child_process'); const fs = require('fs'); const f = require('os').tmpdir() + '/spp-test.pdf';
+    const r = await A.get(`/api/docs/payment-request/sale/${i1.id}`, true); fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+    const txt = execFileSync('pdftotext', ['-layout', f, '-']).toString(); assert.ok(txt.includes('Jl. Raya Sumenep No. 1')); ok('SPP memakai alamat tujuan dari master pelanggan');
+  } catch (e) { if (e.code !== 'ENOENT') throw e; }
   assert.equal((await A.get('/api/settings/public?store=1')).store_name, 'Toko Maju Jaya'); ok('pengaturan publik per toko');
 
   // ---- laporan & dashboard per toko
@@ -85,7 +113,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
 
   // ---- backup & restore
   const bk = await A.get('/api/backup', true); assert.equal(bk.status, 200); const gz = Buffer.from(await bk.arrayBuffer());
-  const data = JSON.parse(zlib.gunzipSync(gz).toString()); assert.equal(data.app, 'pos-retail'); assert.ok(data.tables.sales.length >= 5 && data.tables.stores.length === 2); ok('backup berisi semua toko (.json.gz)');
+  const data = JSON.parse(zlib.gunzipSync(gz).toString()); assert.equal(data.app, 'pos-retail'); assert.ok(data.tables.sales.length >= 5 && data.tables.stores.length === 2 && data.tables.sale_docs.length === 2); ok('backup berisi semua toko (.json.gz)');
   assert.equal((await K.get('/api/backup', true)).status, 403); ok('kasir tidak bisa backup');
   const nBefore = (await db.one('SELECT COUNT(*) AS n FROM sales')).n; const sOwnerBefore = (await db.one('SELECT COUNT(*) AS n FROM products')).n;
   await A.post('/api/products', { name: 'Barang setelah backup', stock: 1 });
@@ -98,6 +126,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await db.one("SELECT COUNT(*) AS n FROM products WHERE name = 'Barang setelah backup'")).n, 0); ok('restore mengganti seluruh data sesuai backup');
   const A2 = mk(); assert.equal((await A2.post('/api/auth/login', { username: 'owner', password: 'owner123' })).role, 'owner'); A2.h['x-store'] = String(B);
   assert.equal((await A2.get('/api/sales/' + i1.id)).sale_no, i1.sale_no); ok('login & data utuh setelah restore');
+  const dl2 = await A2.get(`/api/invoices/${i1.id}/docs/${d1j.id}/file`, true); assert.ok(Buffer.from(await dl2.arrayBuffer()).equals(pdfBytes)); assert.equal((await A2.get('/api/doc-types')).rows.length, dts.rows.length + 1); ok('dokumen & master dokumen ikut backup/restore');
   const nx = await A2.post('/api/products', { name: 'Barang baru pasca restore', stock: 2 }); assert.equal(nx.code, 201); ok('ID & penomoran lanjut normal setelah restore');
-  const i4 = await A2.post('/api/invoices', { ...base1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1000 }] }); assert.equal(i4.sale_no, '04 / X / AJS / 2026'); ok('counter nomor dokumen ikut dipulihkan');
+  const i4 = await A2.post('/api/invoices', { ...base1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1000 }] }); assert.equal(i4.sale_no, '05 / X / AJS / 2026'); ok('counter nomor dokumen ikut dipulihkan');
 };

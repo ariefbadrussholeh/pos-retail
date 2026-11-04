@@ -37,7 +37,6 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 CREATE TABLE IF NOT EXISTS suppliers (
   id {{ID}},
-  store_id BIGINT NOT NULL DEFAULT 1,
   name VARCHAR(150) NOT NULL,
   contact VARCHAR(100),
   phone VARCHAR(40),
@@ -49,12 +48,12 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 CREATE TABLE IF NOT EXISTS customers (
   id {{ID}},
-  store_id BIGINT NOT NULL DEFAULT 1,
   name VARCHAR(150) NOT NULL,
   phone VARCHAR(40),
   email VARCHAR(100),
   address VARCHAR(300),
   npwp VARCHAR(40),
+  spp_to VARCHAR(300),
   note VARCHAR(300),
   active SMALLINT NOT NULL DEFAULT 1
 );
@@ -210,5 +209,23 @@ CREATE TABLE IF NOT EXISTS payments (
   amount DECIMAL(15,2) NOT NULL,
   method VARCHAR(12) NOT NULL DEFAULT 'TUNAI',
   note VARCHAR(300),
+  user_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS doc_types (
+  id {{ID}},
+  name VARCHAR(100) NOT NULL,
+  active SMALLINT NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS sale_docs (
+  id {{ID}},
+  sale_id BIGINT NOT NULL REFERENCES sales(id),
+  type_id BIGINT REFERENCES doc_types(id),
+  title VARCHAR(200) NOT NULL,
+  file_name VARCHAR(200) NOT NULL,
+  mime VARCHAR(100) NOT NULL,
+  size INT NOT NULL,
+  data {{LONGTEXT}} NOT NULL,
+  created_at {{TS}} NOT NULL,
   user_id BIGINT
 );

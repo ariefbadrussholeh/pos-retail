@@ -18,6 +18,7 @@ router.get('/logo', wrap(async (req, res) => {
   if (!m) return res.status(404).end();
   res.set('Content-Type', m[1]).set('Cache-Control', 'no-cache').send(Buffer.from(m[2], 'base64'));
 }));
+router.get('/templates', auth, (req, res) => res.json(Object.entries(require('../templates')).map(([id, t]) => ({ id, label: t.label }))));
 router.get('/', auth, wrap(async (req, res) => res.json(await settings.get(req.sid))));
 router.put('/', auth, owner, wrap(async (req, res) => { stores.clear(); res.json(await settings.save(req.sid, req.body || {})); }));
 module.exports = router;

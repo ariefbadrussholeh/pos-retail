@@ -1,13 +1,22 @@
-// Template "Ardana": kop dengan logo, ornamen kanan atas + strip bawah, ucapan terima kasih.
-// Dipakai per toko lewat Pengaturan > Template dokumen. Gambar ornamen diunggah per toko.
-const { rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows } = require('./pdf-util');
+// TEMPLATE "ARDANA" (CV Ardana Jaya Sejahtera): kop berlogo, ornamen kanan atas, strip footer penuh, ucapan terima kasih.
+// Tampilan tetap (logo, warna, ornamen ada di folder ./ardana dan konstanta di bawah). Nama, alamat, telepon,
+// rekening, dan penandatangan tetap diambil dari Pengaturan toko. Dipilih per toko di Pengaturan > Template dokumen.
+const fs = require('fs');
+const path = require('path');
+const { num, qtyf, tgl, terbilang, taxLabel, refRows } = require('./util');
+
+const A = (f) => fs.readFileSync(path.join(__dirname, 'ardana', f)); // gambar template
+const IMG = { logo: A('logo.png'), header: A('header.png'), footer: A('footer.png'), icon: A('phone.png') };
+const COLOR = { accent: '#F47920', navy: '#1F3864' };
+const THANKS = ['TERIMA KASIH', 'ATAS PEMBELIAN ANDA'];
 
 const PW = 595.28; const PH = 841.89; const X0 = 50; const X1 = PW - 50; const W = X1 - X0;
 const LIMIT = 700;      // batas bawah isi (di atas ornamen bawah)
+const FOOT_H = PW * 263 / 1400; // tinggi strip footer saat selebar halaman
 const NEXT_TOP = 150;   // awal isi di halaman lanjutan (di bawah ornamen atas)
 
-function palette(s) {
-  return { accent: hex(s.doc_accent, '#E8710A'), navy: hex(s.doc_accent2, '#1F3864'), ink: '#222222', body: '#4A4A4A', line: '#9A9A9A', shade: '#F2F2F2' };
+function palette() {
+  return { accent: COLOR.accent, navy: COLOR.navy, ink: '#222222', body: '#4A4A4A', line: '#9A9A9A', shade: '#F2F2F2' };
 }
 // Referensi untuk kop kanan: label singkat agar tidak membungkus
 function metaRefs(d) {
@@ -22,21 +31,17 @@ function img(doc, buf, x, y, o) { if (!buf) return; try { doc.image(buf, x, y, o
 // Ornamen & ucapan di setiap halaman
 function decor(doc, s, imgs, P) {
   img(doc, imgs.header, PW - 190, 0, { width: 190 });
-  img(doc, imgs.footer, 30, PH - 132, { width: 520 });
+  img(doc, imgs.footer, 0, PH - FOOT_H, { width: PW }); // strip penuh lebar halaman, tanpa margin
   const phone = s.phone;
   if (phone) {
     img(doc, imgs.icon, 62, PH - 62, { width: 13 });
     doc.font('Helvetica').fontSize(8.5).fillColor(P.ink).text(phone, imgs.icon ? 80 : 62, PH - 60, { lineBreak: false });
   }
-  const thanks = String(s.doc_thanks || '').trim();
-  if (thanks) {
-    const lines = thanks.split(/\r?\n/);
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(P.navy);
-    lines.forEach((l, i) => doc.text(l, 62, PH - 128 - (lines.length - i) * 11 + 14, { lineBreak: false }));
-  }
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(P.navy);
+  THANKS.forEach((l, i) => doc.text(l, 62, PH - FOOT_H - (THANKS.length - i) * 11 - 2, { lineBreak: false }));
 }
 function setup(doc, s, imgs) {
-  const P = palette(s);
+  const P = palette();
   doc.on('pageAdded', () => { decor(doc, s, imgs, P); doc.y = NEXT_TOP; });
   decor(doc, s, imgs, P);
   return P;
@@ -197,4 +202,7 @@ function paymentRequest(doc, s, d, imgs) {
   doc.font('Helvetica-Bold').text(s.signer_name || '', X0 + 2, y + 62, { width: 260, underline: true });
   doc.font('Helvetica').text(s.signer_title || '', X0 + 2, doc.y, { width: 260 });
 }
-module.exports = { invoice, delivery, 'payment-request': paymentRequest };
+const KINDS = { invoice, delivery, 'payment-request': paymentRequest };
+// Dipanggil oleh services/pdf.js (halaman tanpa margin; semua posisi diatur di file ini).
+function draw(doc, kind, s, d) { KINDS[kind](doc, s, d, IMG); }
+module.exports = { label: 'Ardana', margin: 0, draw };

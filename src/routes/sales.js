@@ -8,7 +8,7 @@ const settings = require('../services/settings');
 const METHODS = ['TUNAI', 'DEBIT', 'QRIS', 'TRANSFER', 'KREDIT'];
 
 async function loadSale(id, sid) {
-  const s = await db.one(`SELECT s.*, u.name AS cashier, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.npwp AS customer_npwp
+  const s = await db.one(`SELECT s.*, u.name AS cashier, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.npwp AS customer_npwp, c.spp_to AS customer_spp_to
     FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.id = ? AND s.store_id = ?`, [id, sid]);
   if (!s) return null;
   s.items = await db.query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id', [id]);
@@ -73,7 +73,7 @@ router.post('/', auth, wrap(async (req, res) => {
       if (paid < total) throw err(400, 'Uang bayar kurang');
       if (method !== 'TUNAI') paid = total; // non tunai pas
     }
-    if (customer_id && !(await t.one('SELECT id FROM customers WHERE id = ? AND store_id = ?', [customer_id, req.sid]))) throw err(400, 'Pelanggan tidak ditemukan');
+    if (customer_id && !(await t.one('SELECT id FROM customers WHERE id = ?', [customer_id]))) throw err(400, 'Pelanggan tidak ditemukan');
     const sale_no = await nextNo(t, req.sid, 'INV');
     const created_at = t.now();
     const id = await t.insert('sales', {

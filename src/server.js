@@ -32,6 +32,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/categories', master.categories);
 app.use('/api/suppliers', master.suppliers);
 app.use('/api/customers', master.customers);
+app.use('/api/doc-types', master.docTypes);
 app.use('/api/users', master.users);
 app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));

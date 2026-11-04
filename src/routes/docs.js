@@ -5,7 +5,7 @@ const settings = require('../services/settings');
 const pdf = require('../services/pdf');
 const { loadSale } = require('./sales');
 const { loadPurchase } = require('./purchasing');
-const { refRows } = require('../services/pdf-util');
+const { refRows } = require('../templates/util');
 
 const SIG = {
   sale: { invoice: ['Penerima', 'Hormat kami'], delivery: ['Penerima', 'Pengirim / Sopir', 'Hormat kami'] },
@@ -16,7 +16,7 @@ function fromSale(s) {
   return {
     side: 'sale', kind: s.kind, no: s.sale_no, date: s.doc_date || s.created_at.slice(0, 10), due_date: s.due_date,
     partyLabel: 'Kepada Yth.', party: { name: s.customer_name || 'Pelanggan Umum', address: s.customer_address, phone: s.customer_phone, npwp: s.customer_npwp },
-    contract_no: s.contract_no, contract_date: s.contract_date, po_ref: s.po_ref, spp_to: s.spp_to, tax_mode: s.tax_mode, tax_rate: s.tax_rate,
+    contract_no: s.contract_no, contract_date: s.contract_date, po_ref: s.po_ref, spp_to: s.customer_spp_to, tax_mode: s.tax_mode, tax_rate: s.tax_rate,
     items: s.items, subtotal: s.subtotal, discount: s.discount, tax: s.tax, total: s.total, paid: Math.min(s.paid, s.total),
     titles: { invoice: 'NOTA PENJUALAN' }, sig: SIG.sale,
     meta: [['No. Invoice', s.sale_no], ['Tanggal', null], ['Jatuh Tempo', null], ['Pembayaran', s.method], ['Kasir', s.cashier]],
@@ -60,9 +60,7 @@ router.get('/:kind/:type/:id', auth, wrap(async (req, res) => {
   if (kind === 'payment-request' && d.total - d.paid <= 0) throw err(409, 'Tagihan sudah lunas, tidak perlu permohonan pembayaran');
   fillDates(d);
   const s = await settings.get(req.sid);
-  const T = settings.toBuffer;
-  const imgs = { logo: T(s.logo), header: T(s.tpl_header), footer: T(s.tpl_footer), icon: T(s.tpl_phone_icon) };
-  const doc = pdf.render(kind, s, imgs, d);
+  const doc = pdf.render(kind, s, d);
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `inline; filename="${kind}-${String(d.no).replace(/[^\w.-]+/g, '_')}.pdf"`);
   doc.pipe(res);

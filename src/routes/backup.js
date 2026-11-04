@@ -3,7 +3,7 @@ const router = require('express').Router();
 const express = require('express');
 const zlib = require('zlib');
 const db = require('../db');
-const { TABLES, VERSION } = require('../db/schema');
+const { TABLES, VERSION, seedDocTypes } = require('../db/schema');
 const stores = require('../services/stores');
 const settings = require('../services/settings');
 const { auth, owner } = require('../middleware/auth');
@@ -20,10 +20,20 @@ router.get('/', wrap(async (req, res) => {
   await write(`{"app":"pos-retail","schema":${VERSION},"exported_at":${JSON.stringify(db.now())},"driver":"${db.client}","tables":{`);
   let first = true;
   for (const t of DATA_TABLES) {
-    const rows = await db.query(`SELECT * FROM ${t}`);
     await write(`${first ? '' : ','}${JSON.stringify(t)}:[`);
     first = false;
-    for (let i = 0; i < rows.length; i += 500) await write((i ? ',' : '') + rows.slice(i, i + 500).map((r) => JSON.stringify(r)).join(','));
+    if (t === 'sale_docs') { // berkas besar: baca per beberapa baris agar memori kecil
+      let last = 0; let n = 0;
+      for (;;) {
+        const rows = await db.query('SELECT * FROM sale_docs WHERE id > ? ORDER BY id LIMIT 10', [last]);
+        if (!rows.length) break;
+        await write((n++ ? ',' : '') + rows.map((r) => JSON.stringify(r)).join(','));
+        last = rows[rows.length - 1].id;
+      }
+    } else {
+      const rows = await db.query(`SELECT * FROM ${t}`);
+      for (let i = 0; i < rows.length; i += 500) await write((i ? ',' : '') + rows.slice(i, i + 500).map((r) => JSON.stringify(r)).join(','));
+    }
     await write(']');
   }
   await write('}}');
@@ -61,8 +71,9 @@ router.post('/restore', express.raw({ type: () => true, limit: '60mb' }), wrap(a
       const cols = await columnsOf(t, tb);
       const keys = Object.keys(rows[0]).filter((k) => cols.has(k));
       const per = Math.max(1, Math.floor(30000 / keys.length));
-      for (let i = 0; i < rows.length; i += per) {
-        const chunk = rows.slice(i, i + per);
+      const big = tb === 'sale_docs' ? 1 : per; // satu berkas per INSERT (ukuran paket)
+      for (let i = 0; i < rows.length; i += big) {
+        const chunk = rows.slice(i, i + big);
         const ph = '(' + keys.map(() => '?').join(',') + ')';
         await t.exec(`INSERT INTO ${tb} (${keys.join(',')}) VALUES ${chunk.map(() => ph).join(',')}`, chunk.flatMap((r) => keys.map((k) => (r[k] === undefined ? null : r[k]))));
       }
@@ -74,6 +85,7 @@ router.post('/restore', express.raw({ type: () => true, limit: '60mb' }), wrap(a
       }
     }
   });
+  await seedDocTypes(); // backup lama (v1.3) belum punya jenis dokumen
   stores.clear(); settings.clearCache();
   res.json({ ok: true, counts });
 }));

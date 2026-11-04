@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./index');
 
-const VERSION = 3; // 3 = multi toko + penjualan custom
+const VERSION = 4; // 3 = multi toko + penjualan custom; 4 = pelanggan/rekanan bersama, dokumen INAPROC
 const INDEXES = [
   'CREATE INDEX idx_products_barcode ON products(barcode)',
   'CREATE INDEX idx_products_name ON products(name)',
@@ -30,9 +30,11 @@ const INDEXES = [
   'CREATE UNIQUE INDEX ux_gr_no ON goods_receipts(store_id, gr_no)',
   'CREATE UNIQUE INDEX ux_opnames_no ON opnames(store_id, opname_no)',
 ];
-const STORE_TABLES = ['categories', 'suppliers', 'customers', 'products', 'sales', 'purchases', 'goods_receipts', 'opnames'];
+// pelanggan & pemasok (customers, suppliers) milik bersama semua toko
+const STORE_TABLES = ['categories', 'products', 'sales', 'purchases', 'goods_receipts', 'opnames'];
 const ADD_COLS = [
   ['users', 'store_id', 'BIGINT'],
+  ['customers', 'spp_to', 'VARCHAR(300)'],
   ...STORE_TABLES.map((t) => [t, 'store_id', 'BIGINT NOT NULL DEFAULT 1']),
   ['sales', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'POS'"],
   ['sales', 'doc_date', 'DATE'],
@@ -45,7 +47,7 @@ const ADD_COLS = [
 ];
 // kolom UNIQUE lama (global) yang diganti unik per toko
 const OLD_UNIQUE = [['categories', 'name'], ['products', 'sku'], ['sales', 'sale_no'], ['purchases', 'po_no'], ['goods_receipts', 'gr_no'], ['opnames', 'opname_no']];
-const TABLES = ['app_meta', 'stores', 'store_settings', 'counters', 'users', 'categories', 'suppliers', 'customers', 'products', 'stock_moves', 'sales', 'sale_items', 'purchases', 'purchase_items', 'goods_receipts', 'goods_receipt_items', 'opnames', 'opname_items', 'payments'];
+const TABLES = ['app_meta', 'stores', 'store_settings', 'counters', 'users', 'categories', 'suppliers', 'customers', 'products', 'stock_moves', 'sales', 'sale_items', 'purchases', 'purchase_items', 'goods_receipts', 'goods_receipt_items', 'opnames', 'opname_items', 'payments', 'doc_types', 'sale_docs'];
 
 const ignore = (re) => (e) => { if (!re.test(e.message)) throw e; };
 
@@ -105,7 +107,14 @@ async function createSchema() {
     for (const c of cs) if (c.k !== 'BARCODE' && !/^\d+:/.test(c.k)) await db.exec('UPDATE counters SET k = ? WHERE k = ?', ['1:' + c.k, c.k]);
     await db.exec("UPDATE users SET store_id = 1 WHERE role = 'kasir' AND store_id IS NULL");
   }
+  await seedDocTypes();
   await db.upsert('app_meta', { k: 'schema', v: String(VERSION) }, ['k']);
+}
+// Jenis dokumen awal untuk Penjualan INAPROC (bisa diubah di menu Master Dokumen). "Lainnya" selalu tersedia di layar upload.
+const DOC_TYPES = ['Surat Pesanan (SP)', 'Kontrak / SPK', 'Berita Acara Serah Terima (BAST)', 'Surat Jalan (bertanda tangan)', 'Invoice / Kwitansi', 'Faktur Pajak', 'Bukti Transfer'];
+async function seedDocTypes() {
+  if ((await db.one('SELECT COUNT(*) AS n FROM doc_types')).n > 0) return;
+  for (const name of DOC_TYPES) await db.insert('doc_types', { name, active: 1 });
 }
 // Dipakai server: migrasi otomatis sekali per proses (aman diulang)
 let ready = null;
@@ -113,4 +122,4 @@ function ensureSchema() {
   if (!ready) ready = getVersion().then((v) => (v >= VERSION ? null : createSchema())).catch((e) => { ready = null; throw e; });
   return ready;
 }
-module.exports = { createSchema, ensureSchema, TABLES, VERSION };
+module.exports = { createSchema, ensureSchema, seedDocTypes, TABLES, VERSION };

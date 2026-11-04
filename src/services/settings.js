@@ -27,20 +27,10 @@ const DEFAULTS = {
   signer_name: '',
   signer_title: 'Pimpinan',
   doc_note: '',             // catatan kaki invoice
-  doc_template: 'default',  // default | ardana  (template invoice, surat jalan, SPP)
-  doc_accent: '#E8710A',    // warna aksen template (hex)
-  doc_accent2: '#1F3864',   // warna kedua (template Ardana)
-  doc_no_format: '{n} / {rom} / {code} / {yyyy}', // format nomor Penjualan Custom
-  custom_tax_percent: '11', // tarif pajak bawaan Penjualan Custom
-  doc_thanks: 'TERIMA KASIH\nATAS PEMBELIAN ANDA', // teks ucapan di surat jalan/invoice
-  tpl_header: '',           // gambar ornamen kanan atas (PNG/JPEG)
-  tpl_footer: '',           // gambar ornamen/strip bawah (PNG/JPEG)
-  tpl_phone_icon: '',       // ikon telepon di strip bawah (PNG/JPEG)
+  doc_template: 'default',  // nama template (lihat src/templates/index.js)
 };
-const IMG_KEYS = ['tpl_header', 'tpl_footer', 'tpl_phone_icon'];
-const TEMPLATES = ['default', 'ardana'];
 const BOOL = ['receipt_show_logo', 'receipt_show_npwp', 'tax_inclusive', 'allow_negative_stock', 'auto_barcode'];
-const NUM = ['tax_percent', 'default_due_days', 'paper_width', 'custom_tax_percent'];
+const NUM = ['tax_percent', 'default_due_days', 'paper_width'];
 
 const cache = new Map(); // storeId -> pengaturan mentah
 async function load(sid) {
@@ -72,15 +62,9 @@ async function save(sid, input) {
       if (!/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) throw bad('Logo harus PNG/JPEG/WebP');
       if (v.length > 600000) throw bad('Ukuran logo terlalu besar (maks ~400 KB)');
     }
-    if (IMG_KEYS.includes(k) && v) {
-      if (!/^data:image\/(png|jpeg|jpg);base64,[A-Za-z0-9+/=]+$/.test(v)) throw bad('Gambar template harus PNG atau JPEG');
-      if (v.length > 900000) throw bad('Ukuran gambar template terlalu besar (maks ~650 KB)');
-    }
     if (k === 'paper_width' && !['58', '80'].includes(v)) v = '80';
-    if (k === 'doc_template' && !TEMPLATES.includes(v)) throw bad('Template tidak dikenal');
-    if (k === 'doc_accent' || k === 'doc_accent2') { if (!/^#[0-9a-fA-F]{6}$/.test(v)) throw bad('Warna harus berformat #RRGGBB'); }
-    if (k === 'doc_no_format' && !/\{n\}/.test(v)) throw bad('Format nomor harus memuat {n}');
-    if (k === 'tax_percent' || k === 'custom_tax_percent') { const n = Number(v); if (!(n >= 0 && n <= 100)) throw bad('Pajak harus 0-100'); }
+    if (k === 'doc_template' && !require('../templates')[v]) throw bad('Template tidak dikenal');
+    if (k === 'tax_percent') { const n = Number(v); if (!(n >= 0 && n <= 100)) throw bad('Pajak harus 0-100'); }
     rows.push([k, v]);
   }
   await db.tx(async (t) => {
@@ -100,4 +84,4 @@ function toBuffer(url) {
 }
 const logoBuffer = async (sid) => toBuffer((await get(sid)).logo);
 const publicInfo = (s) => ({ store_name: s.store_name, store_tagline: s.store_tagline, has_logo: !!s.logo });
-module.exports = { get, save, logoBuffer, toBuffer, publicInfo, clearCache, DEFAULTS, TEMPLATES };
+module.exports = { get, save, logoBuffer, toBuffer, publicInfo, clearCache, DEFAULTS };
