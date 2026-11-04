@@ -165,7 +165,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-143 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan INAPROC (3 mode pajak, piutang, void, dokumen pendukung), pelanggan/pemasok bersama, template dokumen, backup dan restore.
+144 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan INAPROC (3 mode pajak, piutang, void, dokumen pendukung), pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

@@ -10,7 +10,7 @@ function crud(table, fields, o = {}) {
   const sc = o.shared ? { where: '', and: '', args: (a) => a } : { where: ' AND store_id = ?', and: 'store_id = ?', args: (a, sid) => [...a, sid] };
   const pick = (b) => {
     const d = {};
-    for (const f of fields) if (f in b) d[f] = b[f] === '' ? null : b[f];
+    for (const f of fields) if (f in b) d[f] = b[f] === '' ? null : (typeof b[f] === 'boolean' ? (b[f] ? 1 : 0) : b[f]); // centang -> 1/0 (kolom SMALLINT di Postgres)
     return d;
   };
   const need = (d, creating) => {

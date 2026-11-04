@@ -38,6 +38,13 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await KB.post('/api/sales', { items: [{ product_id: (await K.get('/api/products/catalog'))[0].id, qty: 1 }], method: 'TUNAI', paid: 99999 })).code, 400); ok('kasir tidak bisa jual barang toko lain');
   assert.equal((await A.get('/api/products/' + pB.id)).stock, 497); ok('stok toko B berkurang');
 
+  // kotak centang (boolean true) dari form admin harus diterima di Postgres (kolom SMALLINT)
+  for (const [u, b] of [['/api/customers', { name: 'Cek Centang', active: true }], ['/api/suppliers', { name: 'Cek Centang', active: true }], ['/api/doc-types', { name: 'Cek Centang', active: true }]]) {
+    const r = await A.post(u, b); assert.equal(r.code, 201, u); assert.equal(+r.active, 1);
+    assert.equal(+(await A.put(`${u}/${r.id}`, { active: false })).active, 0);
+    await A.del(`${u}/${r.id}`);
+  }
+  ok('kotak centang aktif (true/false) diterima untuk pelanggan, pemasok, jenis dokumen');
   // ---- penjualan INAPROC
   const cus1 = (await A.get('/api/customers?q=berkah')).rows[0].id;
   const cu = await A.post('/api/customers', { name: 'UPT Puskesmas Talang', address: 'Jl. Raya Sumenep, Pamekasan' }); assert.equal(cu.code, 201);
