@@ -44,16 +44,14 @@ router.post('/', auth, wrap(async (req, res) => {
       const qty = round3(num(i.qty));
       if (!(qty > 0)) throw err(400, `Qty ${p.name} harus > 0`);
       const price = (p.wholesale_min > 0 && p.wholesale_price > 0 && qty >= p.wholesale_min) ? p.wholesale_price : p.sell_price;
-      const disc = round2(Math.max(num(i.discount), 0));
+      const disc = 0; // diskon dihapus sejak v1.5
       const gross = round2(price * qty);
-      if (disc > gross) throw err(400, `Diskon ${p.name} melebihi harga`);
       const total = round2(gross - disc);
       subtotal += total;
       lines.push({ p, qty, price, disc, total });
     }
     subtotal = round2(subtotal);
-    const discount = round2(Math.max(num(b.discount), 0));
-    if (discount > subtotal) throw err(400, 'Diskon melebihi subtotal');
+    const discount = 0;
     const base = round2(subtotal - discount);
     let tax = 0, total = base;
     if (cfg.tax_percent > 0) {
@@ -98,13 +96,14 @@ router.get('/', auth, wrap(async (req, res) => {
   const { limit, offset } = page(req.query, 50);
   const r = range(req.query);
   const w = ['s.store_id = ?', 's.created_at >= ?', 's.created_at < ?']; const p = [req.sid, r.f, r.t];
-  if (req.query.kind) { w.push('s.kind = ?'); p.push(String(req.query.kind).toUpperCase()); }
+  if (req.query.kind === 'FAKTUR') w.push("s.kind <> 'POS'"); // semua jenis penjualan faktur (INAPROC, SP, LANGSUNG)
+  else if (req.query.kind) { w.push('s.kind = ?'); p.push(String(req.query.kind).toUpperCase()); }
   if (req.user.role !== 'owner') { w.push('s.user_id = ?'); p.push(req.user.id); }
   if (req.query.q) { w.push('(LOWER(s.sale_no) LIKE ? OR LOWER(c.name) LIKE ?)'); p.push(like(req.query.q), like(req.query.q)); }
   if (req.query.status) { w.push('s.status = ?'); p.push(req.query.status); }
   if (req.query.unpaid === '1') { w.push("s.status = 'DONE' AND s.paid < s.total"); }
   const from = `FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE ${w.join(' AND ')}`;
-  const rows = await db.query(`SELECT s.id, s.sale_no, s.created_at, s.kind, s.contract_no, s.po_ref, s.total, s.paid, s.method, s.status, s.due_date, u.name AS cashier, c.name AS customer_name ${from} ORDER BY s.id DESC LIMIT ? OFFSET ?`, [...p, limit, offset]);
+  const rows = await db.query(`SELECT s.id, s.sale_no, s.created_at, s.kind, s.contract_no, s.total, s.paid, s.method, s.status, s.due_date, u.name AS cashier, c.name AS customer_name ${from} ORDER BY s.id DESC LIMIT ? OFFSET ?`, [...p, limit, offset]);
   const agg = await db.one(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN s.status = 'DONE' THEN s.total ELSE 0 END), 0) AS sum ${from}`, p);
   res.json({ rows, total: agg.n, sum: agg.sum });
 }));

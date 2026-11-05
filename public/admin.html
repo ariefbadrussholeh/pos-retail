@@ -9,42 +9,26 @@
 <link rel="stylesheet" href="/css/admin.css">
 </head>
 <body>
-<div class="shell">
+<div class="shell" id="shell">
   <aside class="side" id="side">
     <div class="brand" id="brand"></div>
-    <div class="storebox" id="storebox"></div>
-    <nav id="nav">
-      <a href="#/dashboard">Dashboard</a>
-      <div class="grp">Transaksi</div>
-      <a href="#/sales">Penjualan</a>
-      <a href="#/invoices">Penjualan INAPROC</a>
-      <a href="#/purchases">Pembelian</a>
-      <a href="#/receipts">Penerimaan</a>
-      <a href="#/opnames">Stok Opname</a>
-      <div class="grp">Data</div>
-      <a href="#/products">Barang</a>
-      <a href="#/categories">Kategori</a>
-      <a href="#/suppliers">Pemasok</a>
-      <a href="#/customers">Pelanggan</a>
-      <a href="#/doctypes">Master Dokumen</a>
-      <div class="grp">Laporan</div>
-      <a href="#/stockcard">Kartu Stok</a>
-      <a href="#/reports">Laporan &amp; Excel</a>
-      <div class="grp">Sistem</div>
-      <a href="#/stores">Toko</a>
-      <a href="#/users">Pengguna</a>
-      <a href="#/backup">Backup &amp; Restore</a>
-      <a href="#/settings">Identitas &amp; Pengaturan</a>
-    </nav>
-    <div class="me">
-      <div><b id="meName"></b><div class="muted" id="meRole"></div></div>
-      <div class="meb"><a href="/pos.html"><button class="sm primary">Buka Kasir</button></a> <button class="sm" id="pw">Password</button> <button class="sm" id="out">Keluar</button> <span id="themeSlot"></span></div>
-    </div>
+    <nav id="nav" aria-label="Menu utama"></nav>
   </aside>
-  <main class="content">
-    <button class="menu ghost" id="menu">Menu</button>
-    <div id="view"></div>
-  </main>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon" id="menu" aria-label="Ciutkan atau tampilkan menu" title="Menu"></button>
+      <div class="storebox" id="storebox"></div>
+      <div class="spacer"></div>
+      <a href="/pos.html" class="btn sm primary" id="toPos" title="Buka layar kasir">Kasir</a>
+      <span id="themeSlot"></span>
+      <div class="um">
+        <button class="um-btn" id="umBtn" aria-haspopup="menu" aria-expanded="false"><span class="av" id="meAv"></span><span class="um-t"><b id="meName"></b><small id="meRole"></small></span><span class="chev"></span></button>
+        <div class="um-menu hidden" id="umMenu" role="menu"><button id="pw" role="menuitem">Ganti password</button><button id="out" role="menuitem">Keluar</button></div>
+      </div>
+    </header>
+    <main class="content"><div id="view"></div></main>
+  </div>
 </div>
 <script src="/js/common.js"></script>
 <script src="/js/admin-core.js"></script>

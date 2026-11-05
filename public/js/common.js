@@ -372,5 +372,13 @@
   };
 
   // Identitas toko di header (nama + logo)
+  // Acuan harga (sama dengan src/services/pricing.js): offline = (dasar + akomodasi) + laba%; INAPROC = offline + PPH + PPN
+  POS.priceCalc = (buy, c) => {
+    const r2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
+    const dasar = r2(Number(buy) || 0); const akomodasi = r2(Number(c.price_akomodasi) || 0); const jumlah = r2(dasar + akomodasi);
+    const laba = r2(jumlah * (Number(c.price_laba) || 0) / 100); const offline = r2(jumlah + laba);
+    const pph = r2(offline * (Number(c.price_pph) || 0) / 100); const ppn = r2(offline * (Number(c.price_ppn) || 0) / 100);
+    return { dasar, akomodasi, jumlah, laba, offline, pph, ppn, inaproc: r2(offline + pph + ppn) };
+  };
   POS.brand = (st) => (st.logo || st.has_logo ? `<img src="${POS.logo()}v=${(st.store_name || '').length}" alt="" class="brand-logo"> ` : '') + POS.esc(st.store_name);
 })();

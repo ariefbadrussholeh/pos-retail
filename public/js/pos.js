@@ -64,11 +64,11 @@
   // ---------- Render ----------
   function render() {
     const T = totals();
-    $('#lines').innerHTML = S.cart.map((l, i) => `<tr data-i="${i}" class="${i === S.sel ? 'sel' : ''}"><td class="no">${i + 1}</td><td class="kode">${esc(l.p.barcode || l.p.sku)}</td><td>${esc(l.p.name)}</td><td class="r m">${nf(l.qty)}</td><td class="sat">${esc(l.p.unit)}</td><td class="r m">${money(l.price)}${l.price !== l.p.price ? ' <span class="tag blue">G</span>' : ''}</td><td class="r m">${l.discount ? money(l.discount) : ''}</td><td class="r m jml">${money(l.total)}</td></tr>`).join('');
+    $('#lines').innerHTML = S.cart.map((l, i) => `<tr data-i="${i}" class="${i === S.sel ? 'sel' : ''}"><td class="no">${i + 1}</td><td class="kode">${esc(l.p.barcode || l.p.sku)}</td><td>${esc(l.p.name)}</td><td class="r m">${nf(l.qty)}</td><td class="sat">${esc(l.p.unit)}</td><td class="r m">${money(l.price)}${l.price !== l.p.price ? ' <span class="tag blue">G</span>' : ''}</td><td class="r m jml">${money(l.total)}</td></tr>`).join('');
     $('#empty').classList.toggle('hidden', S.cart.length > 0);
     const row = $('#lines tr.sel'); if (row) row.scrollIntoView({ block: 'nearest' });
     $('#total').textContent = money(T.total); $('#s-items').textContent = nf(T.items); $('#s-sub').textContent = money(T.sub);
-    $('#s-disc').textContent = T.disc ? '-' + money(T.disc) : '0'; $('#s-tax').textContent = money(T.tax);
+    $('#s-tax').textContent = money(T.tax);
     $('#cust').textContent = S.customer ? S.customer.name : 'Umum';
     $('#last').textContent = S.last ? `${S.last.sale_no.slice(-4)}  ${rp(S.last.total)}${S.last.method === 'TUNAI' ? '  kembali ' + money(S.last.change_amount) : ''}` : '-';
     $('#heldc').textContent = held().length;
@@ -106,24 +106,6 @@
     if (!(n > 0)) { toast('Qty tidak valid', 'err'); return; }
     if (!ST.allow_negative_stock && n > l.p.stock) { toast('Stok tidak cukup', 'err'); return; }
     l.qty = r3(n); render();
-  }
-  function parseDisc(v, gross) { v = String(v).trim(); if (!v) return 0; if (v.endsWith('%')) { const p = toNum(v.slice(0, -1)); return Number.isFinite(p) ? r2(gross * Math.min(Math.max(p, 0), 100) / 100) : NaN; } return toNum(v); }
-  async function discLine() {
-    const l = cur(); if (!l) return;
-    const v = await POS.prompt('Diskon baris', l.p.name, l.discount ? String(l.discount) : '', 'Nominal (5000) atau persen (10%). Kosong = hapus diskon.');
-    if (v === undefined) return;
-    const d = parseDisc(v, l.price * l.qty);
-    if (!Number.isFinite(d) || d < 0 || d > l.price * l.qty) { toast('Diskon tidak valid', 'err'); return; }
-    l.discount = d; render();
-  }
-  async function discTotal() {
-    if (!S.cart.length) return;
-    const T = totals();
-    const v = await POS.prompt('Diskon total', `Subtotal ${rp(T.sub)}`, S.discount ? String(S.discount) : '', 'Nominal (5000) atau persen (10%). Kosong = hapus diskon.');
-    if (v === undefined) return;
-    const d = parseDisc(v, T.sub);
-    if (!Number.isFinite(d) || d < 0 || d > T.sub) { toast('Diskon tidak valid', 'err'); return; }
-    S.discount = d; render();
   }
   async function clearCart() {
     if (!S.cart.length) return;
@@ -297,7 +279,7 @@
       if (method === 'KREDIT' && a >= T.total) { err.textContent = 'Uang muka harus kurang dari total'; return; }
       S.busy = true; $('[data-go]', el).disabled = true;
       try {
-        const sale = await POS.post('/api/sales', { items: S.cart.map((l) => ({ product_id: l.p.id, qty: l.qty, discount: l.discount })), discount: T.disc, customer_id: S.customer && S.customer.id, method, paid: method === 'TUNAI' || method === 'KREDIT' ? a : T.total, due_date: method === 'KREDIT' ? $('#pd', el).value : undefined });
+        const sale = await POS.post('/api/sales', { items: S.cart.map((l) => ({ product_id: l.p.id, qty: l.qty })), customer_id: S.customer && S.customer.id, method, paid: method === 'TUNAI' || method === 'KREDIT' ? a : T.total, due_date: method === 'KREDIT' ? $('#pd', el).value : undefined });
         for (const l of S.cart) { const p = CAT.find((x) => x.id === l.p.id); if (p) p.stock = r3(p.stock - l.qty); }
         S.last = sale; resetCart(); m.close(sale); finished(sale);
       } catch (er) { err.textContent = er.message; beep(false); if (er.status === 409) loadCatalog(true); }
@@ -361,7 +343,7 @@
   }
 
   function help() {
-    const rows = [['F1', 'Bantuan ini'], ['F2', 'Fokus ke kolom cari'], ['F3', 'Ubah qty baris terpilih'], ['F4', 'Pilih pelanggan'], ['F5', 'Tahan transaksi'], ['F6', 'Panggil transaksi ditahan'], ['F7', 'Diskon baris terpilih'], ['F8', 'Diskon total'], ['F9', 'Riwayat hari ini / cetak ulang'], ['F10', 'Buka laci kas'], ['F12 / End', 'Bayar'], ['Enter (kosong)', 'Bayar'], ['Ctrl+P', 'Printer & perangkat'], ['Ctrl+K', 'Scan barcode dengan kamera'], ['Ctrl+Del', 'Kosongkan keranjang'], ['Qty*kode', 'Contoh 3*8999...'], ['Qty*  lalu scan', 'Qty untuk barang berikut'], ['+ / -', 'Qty baris +1 / -1'], ['Del', 'Hapus baris terpilih'], ['Up / Down', 'Pilih baris / hasil'], ['Esc', 'Bersihkan input']];
+    const rows = [['F1', 'Bantuan ini'], ['F2', 'Fokus ke kolom cari'], ['F3', 'Ubah qty baris terpilih'], ['F4', 'Pilih pelanggan'], ['F5', 'Tahan transaksi'], ['F6', 'Panggil transaksi ditahan'], ['F9', 'Riwayat hari ini / cetak ulang'], ['F10', 'Buka laci kas'], ['F12 / End', 'Bayar'], ['Enter (kosong)', 'Bayar'], ['Ctrl+P', 'Printer & perangkat'], ['Ctrl+K', 'Scan barcode dengan kamera'], ['Ctrl+Del', 'Kosongkan keranjang'], ['Qty*kode', 'Contoh 3*8999...'], ['Qty*  lalu scan', 'Qty untuk barang berikut'], ['+ / -', 'Qty baris +1 / -1'], ['Del', 'Hapus baris terpilih'], ['Up / Down', 'Pilih baris / hasil'], ['Esc', 'Bersihkan input']];
     const m = POS.modal({ title: 'Pintasan keyboard', wide: true, body: '<div class="helpgrid">' + rows.map((r) => `<div><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('') + '</div>', footer: '<button class="primary" autofocus>Tutup <kbd>Esc</kbd></button>' });
     m.el.addEventListener('click', (e) => { if (e.target.closest('button')) m.close(); });
   }
@@ -373,7 +355,7 @@
   $('#cam').addEventListener('click', camScan);
 
   // ---------- Pintasan global ----------
-  const ACT = { F1: help, F2: () => { q.focus(); q.select(); }, F3: editQty, F4: pickCustomer, F5: holdCart, F6: recall, F7: discLine, F8: discTotal, F9: history, F10: openDrawer, F12: openPay, End: openPay };
+  const ACT = { F1: help, F2: () => { q.focus(); q.select(); }, F3: editQty, F4: pickCustomer, F5: holdCart, F6: recall, F9: history, F10: openDrawer, F12: openPay, End: openPay };
   document.addEventListener('keydown', (e) => {
     if (document.querySelector('dialog[open]')) { if (/^F\d+$/.test(e.key) && !['F5', 'F12'].includes(e.key)) e.preventDefault(); if (e.key === 'F5' || e.key === 'F12') e.preventDefault(); return; }
     const key = (e.ctrlKey ? 'Ctrl+' : '') + e.key;

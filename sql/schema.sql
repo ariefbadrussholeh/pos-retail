@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS products (
   id {{ID}},
   store_id BIGINT NOT NULL DEFAULT 1,
+  item_id BIGINT,
   sku VARCHAR(50) NOT NULL,
   barcode VARCHAR(60),
   name VARCHAR(200) NOT NULL,

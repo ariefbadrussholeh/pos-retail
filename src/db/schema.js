@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./index');
 
-const VERSION = 4; // 3 = multi toko + penjualan custom; 4 = pelanggan/rekanan bersama, dokumen INAPROC
+const VERSION = 5; // 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
 const INDEXES = [
   'CREATE INDEX idx_products_barcode ON products(barcode)',
   'CREATE INDEX idx_products_name ON products(name)',
@@ -23,7 +23,8 @@ const INDEXES = [
   'CREATE INDEX idx_payments_ref ON payments(ref_type, ref_id)',
   // keunikan per toko (bukan global)
   'CREATE UNIQUE INDEX ux_stores_code ON stores(code)',
-  'CREATE UNIQUE INDEX ux_categories_name ON categories(store_id, name)',
+  'CREATE UNIQUE INDEX ux_categories_uname ON categories(name)',
+  'CREATE UNIQUE INDEX ux_products_item_store ON products(item_id, store_id)',
   'CREATE UNIQUE INDEX ux_products_sku ON products(store_id, sku)',
   'CREATE UNIQUE INDEX ux_sales_no ON sales(store_id, sale_no)',
   'CREATE UNIQUE INDEX ux_purchases_no ON purchases(store_id, po_no)',
@@ -31,10 +32,12 @@ const INDEXES = [
   'CREATE UNIQUE INDEX ux_opnames_no ON opnames(store_id, opname_no)',
 ];
 // pelanggan & pemasok (customers, suppliers) milik bersama semua toko
-const STORE_TABLES = ['categories', 'products', 'sales', 'purchases', 'goods_receipts', 'opnames'];
+// kategori juga milik bersama sejak v5; barang = satu baris per toko (stok & harga), dikelompokkan oleh item_id
+const STORE_TABLES = ['products', 'sales', 'purchases', 'goods_receipts', 'opnames'];
 const ADD_COLS = [
   ['users', 'store_id', 'BIGINT'],
   ['customers', 'spp_to', 'VARCHAR(300)'],
+  ['products', 'item_id', 'BIGINT'],
   ...STORE_TABLES.map((t) => [t, 'store_id', 'BIGINT NOT NULL DEFAULT 1']),
   ['sales', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'POS'"],
   ['sales', 'doc_date', 'DATE'],
@@ -82,10 +85,6 @@ async function createSchema() {
   // --- migrasi dari versi lama (satu toko) ---
   for (const [t, c, ddl] of ADD_COLS) await addColumn(t, c, ddl);
   if (ver < 3) for (const [t, c] of OLD_UNIQUE) await dropOldUnique(t, c);
-  for (const ix of INDEXES) {
-    try { await db.exec(pg ? ix.replace(/CREATE (UNIQUE )?INDEX/, (m) => m + ' IF NOT EXISTS') : ix); }
-    catch (e) { if (!/exist|Duplicate key name/i.test(e.message)) throw e; }
-  }
   if (pg) {
     // Supabase membuka schema public lewat Data API (PostgREST). Aplikasi ini memakai koneksi
     // Postgres langsung (bypass RLS), jadi RLS dinyalakan tanpa policy agar anon key tidak bisa baca/tulis.
@@ -107,8 +106,34 @@ async function createSchema() {
     for (const c of cs) if (c.k !== 'BARCODE' && !/^\d+:/.test(c.k)) await db.exec('UPDATE counters SET k = ? WHERE k = ?', ['1:' + c.k, c.k]);
     await db.exec("UPDATE users SET store_id = 1 WHERE role = 'kasir' AND store_id IS NULL");
   }
+  if (ver < 5) await migrateV5();
+  for (const ix of INDEXES) {
+    try { await db.exec(pg ? ix.replace(/CREATE (UNIQUE )?INDEX/, (m) => m + ' IF NOT EXISTS') : ix); }
+    catch (e) { if (!/exist|Duplicate key name/i.test(e.message)) throw e; }
+  }
   await seedDocTypes();
   await db.upsert('app_meta', { k: 'schema', v: String(VERSION) }, ['k']);
+}
+// v5: kategori digabung per nama; barang dikelompokkan per item_id (SKU sama di beberapa toko = satu barang),
+// setiap toko punya baris untuk setiap barang; kind CUSTOM -> INAPROC; No. Kontrak dan No. SP disatukan.
+async function migrateV5() {
+  const cats = await db.query('SELECT id, name FROM categories ORDER BY id');
+  const keep = new Map();
+  for (const c of cats) {
+    const k = c.name.trim().toLowerCase();
+    if (!keep.has(k)) { keep.set(k, c.id); continue; }
+    await db.exec('UPDATE products SET category_id = ? WHERE category_id = ?', [keep.get(k), c.id]);
+    await db.exec('DELETE FROM categories WHERE id = ?', [c.id]);
+  }
+  if (db.client === 'pg') await db.exec('DROP INDEX IF EXISTS ux_categories_name');
+  else { try { await db.exec('DROP INDEX ux_categories_name ON categories'); } catch (e) { ignore(/check that column\/key exists|Can't DROP|doesn't exist/i)(e); } }
+
+  const prods = await db.query('SELECT id, sku FROM products ORDER BY id');
+  const first = new Map();
+  for (const p of prods) { if (!first.has(p.sku)) first.set(p.sku, p.id); await db.exec('UPDATE products SET item_id = ? WHERE id = ?', [first.get(p.sku), p.id]); }
+  await require('../services/catalog').fillAllStores(db);
+  await db.exec("UPDATE sales SET kind = 'INAPROC' WHERE kind = 'CUSTOM'");
+  await db.exec("UPDATE sales SET contract_no = po_ref WHERE (contract_no IS NULL OR contract_no = '') AND po_ref IS NOT NULL AND po_ref <> ''");
 }
 // Jenis dokumen awal untuk Penjualan INAPROC (bisa diubah di menu Master Dokumen). "Lainnya" selalu tersedia di layar upload.
 const DOC_TYPES = ['Surat Pesanan (SP)', 'Kontrak / SPK', 'Berita Acara Serah Terima (BAST)', 'Surat Jalan (bertanda tangan)', 'Invoice / Kwitansi', 'Faktur Pajak', 'Bukti Transfer'];

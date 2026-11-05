@@ -5,8 +5,11 @@ const { wrap, err, num, like, page, round2, round3 } = require('../services/util
 const stock = require('../services/stock');
 const barcode = require('../services/barcode');
 const settings = require('../services/settings');
+const pricing = require('../services/pricing');
+const catalog = require('../services/catalog');
+const ExcelJS = require('exceljs');
 
-const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.buy_price, p.sell_price, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active';
+const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.item_id, p.buy_price, p.sell_price, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active';
 const FROM = 'FROM products p LEFT JOIN categories c ON c.id = p.category_id';
 
 // Katalog ringkas untuk layar kasir (difilter di browser agar pencarian instan)
@@ -36,11 +39,46 @@ router.post('/barcode/next', auth, owner, wrap(async (req, res) => {
 // Beri barcode otomatis ke semua barang aktif yang belum punya
 router.post('/barcode/fill', auth, owner, wrap(async (req, res) => {
   const n = await db.tx(async (t) => {
-    const rows = await t.query("SELECT id FROM products WHERE store_id = ? AND active = 1 AND (barcode IS NULL OR barcode = '') ORDER BY id", [req.sid]);
-    for (const r of rows) await t.exec('UPDATE products SET barcode = ? WHERE id = ?', [await barcode.next(t), r.id]);
+    const rows = await t.query("SELECT item_id FROM products WHERE store_id = ? AND active = 1 AND (barcode IS NULL OR barcode = '') ORDER BY id", [req.sid]);
+    for (const r of rows) await t.exec('UPDATE products SET barcode = ? WHERE item_id = ?', [await barcode.next(t), r.item_id]);
     return rows.length;
   });
   res.json({ filled: n });
+}));
+
+// Ekspor Excel acuan harga e-katalog (mengikuti format RINCIAN BARANG E-CATALOG): harga dasar sampai harga e-katalog
+// dihitung dari HARGA DASAR + pengaturan acuan harga toko, bukan dari harga jual di master.
+router.get('/export/ecatalog', auth, owner, wrap(async (req, res) => {
+  const cfg = await settings.get(req.sid);
+  const rows = await db.query('SELECT sku, name, unit, buy_price FROM products WHERE store_id = ? AND active = 1 ORDER BY name', [req.sid]);
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('E-Katalog');
+  ws.getCell('A1').value = 'Parameter toko ' + (req.store ? req.store.name : ''); ws.getCell('A1').font = { bold: true };
+  const P = [['Akomodasi (Rp)', cfg.price_akomodasi], ['Laba (%)', cfg.price_laba], ['PPH (%)', cfg.price_pph], ['PPN (%)', cfg.price_ppn]];
+  P.forEach(([k, v], i) => { ws.getCell(2, 3 + i * 2).value = k; ws.getCell(2, 4 + i * 2).value = v; ws.getCell(2, 3 + i * 2).font = { bold: true }; ws.getCell(2, 4 + i * 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }; });
+  // D2 akomodasi, F2 laba, H2 pph, J2 ppn
+  const head = ['No', 'SKU', 'Nama Barang', 'Satuan', 'Harga Dasar', 'Akomodasi', 'Jumlah', 'Laba', 'Total Jumlah & Laba (harga offline)', 'PPH', 'Total Blm PPN', 'PPN', 'Total (Harga E-Katalog)'];
+  const hr = ws.getRow(4); head.forEach((h, i) => { const c = hr.getCell(i + 1); c.value = h; c.font = { bold: true }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = { bottom: { style: 'thin' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; });
+  hr.height = 32;
+  rows.forEach((r, i) => {
+    const n = 5 + i; const c = pricing.calc(r.buy_price, cfg); const row = ws.getRow(n);
+    row.getCell(1).value = i + 1; row.getCell(2).value = r.sku; row.getCell(3).value = r.name; row.getCell(4).value = r.unit;
+    row.getCell(5).value = c.dasar;
+    row.getCell(6).value = { formula: '$D$2', result: c.akomodasi };
+    row.getCell(7).value = { formula: `E${n}+F${n}`, result: c.jumlah };
+    row.getCell(8).value = { formula: `G${n}*$F$2/100`, result: c.laba };
+    row.getCell(9).value = { formula: `G${n}+H${n}`, result: c.offline };
+    row.getCell(10).value = { formula: `I${n}*$H$2/100`, result: c.pph };
+    row.getCell(11).value = { formula: `I${n}+J${n}`, result: c.beforePpn };
+    row.getCell(12).value = { formula: `I${n}*$J$2/100`, result: c.ppn };
+    row.getCell(13).value = { formula: `K${n}+L${n}`, result: c.inaproc };
+    for (let k = 5; k <= 13; k++) row.getCell(k).numFmt = '#,##0';
+    row.getCell(13).font = { bold: true };
+  });
+  [6, 14, 40, 9, 14, 12, 14, 12, 22, 12, 16, 12, 20].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  ws.views = [{ state: 'frozen', ySplit: 4, xSplit: 3 }];
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition', `attachment; filename="rincian-barang-ecatalog_${db.today()}.xlsx"`);
+  await wb.xlsx.write(res); res.end();
 }));
 
 router.get('/:id', auth, wrap(async (req, res) => {
@@ -65,30 +103,41 @@ function clean(b, creating) {
   return d;
 }
 
-async function autoSku(t, sid) {
-  const n = await t.nextCounter(`${sid}:SKU`);
-  return 'B' + String(n).padStart(6, '0');
+// SKU otomatis berurutan (global, SKU milik bersama); lewati yang sudah dipakai
+async function autoSku(t) {
+  for (let i = 0; i < 200; i++) {
+    const sku = 'B' + String(await t.nextCounter('SKU')).padStart(6, '0');
+    if (!(await t.one('SELECT id FROM products WHERE sku = ? OR barcode = ?', [sku, sku]))) return sku;
+  }
+  throw err(500, 'Gagal membuat SKU');
 }
-async function checkBarcode(t, sid, barcode, exceptId) {
-  if (!barcode) return;
-  const x = await t.one('SELECT id, name FROM products WHERE store_id = ? AND (barcode = ? OR sku = ?) AND id <> ?', [sid, barcode, barcode, exceptId || 0]);
+// SKU & barcode unik di seluruh toko (kecuali barang itu sendiri)
+async function checkBarcode(t, code, exceptItem) {
+  if (!code) return;
+  const x = await t.one('SELECT id, name FROM products WHERE (barcode = ? OR sku = ?) AND item_id <> ?', [code, code, exceptItem || 0]);
   if (x) throw err(409, `Barcode sudah dipakai: ${x.name}`);
 }
+async function checkCategory(t, id) {
+  if (id && !(await t.one('SELECT id FROM categories WHERE id = ?', [id]))) throw err(400, 'Kategori tidak ditemukan');
+}
+// Harga jual awal = harga offline dari acuan harga toko (bila tidak diisi)
+function defaultSell(d, cfg) { if (d.sell_price == null) d.sell_price = pricing.calc(d.buy_price || 0, cfg).offline; }
 
 router.post('/', auth, owner, wrap(async (req, res) => {
   const d = clean(req.body, true);
   const opening = round3(num(req.body.stock));
   const cfg = await settings.get(req.sid);
+  defaultSell(d, cfg);
   const id = await db.tx(async (t) => {
-    if (!d.sku) d.sku = await autoSku(t, req.sid);
+    if (!d.sku) d.sku = await autoSku(t);
     if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
-    await checkBarcode(t, req.sid, d.barcode, 0);
-    await checkBarcode(t, req.sid, d.sku, 0);
-    if (d.category_id && !(await t.one('SELECT id FROM categories WHERE id = ? AND store_id = ?', [d.category_id, req.sid]))) throw err(400, 'Kategori tidak ditemukan');
-    d.store_id = req.sid;
-    d.created_at = t.now();
-    d.stock = 0;
+    await checkBarcode(t, d.barcode, 0);
+    await checkBarcode(t, d.sku, 0);
+    await checkCategory(t, d.category_id);
+    d.store_id = req.sid; d.created_at = t.now(); d.stock = 0;
     const pid = await t.insert('products', d);
+    await t.exec('UPDATE products SET item_id = id WHERE id = ?', [pid]);
+    await catalog.fillAllStores(t); // baris untuk toko lain (stok 0)
     if (opening) await stock.move(t, { store_id: req.sid, product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal', user_id: req.user.id, allowNegative: true });
     return pid;
   });
@@ -98,26 +147,32 @@ router.post('/', auth, owner, wrap(async (req, res) => {
 router.put('/:id', auth, owner, wrap(async (req, res) => {
   const d = clean(req.body, false);
   delete d.stock;
+  const { shared, store } = catalog.split(d);
   await db.tx(async (t) => {
-    if (d.barcode) await checkBarcode(t, req.sid, d.barcode, +req.params.id);
-    if (d.sku) await checkBarcode(t, req.sid, d.sku, +req.params.id);
-    if (d.category_id && !(await t.one('SELECT id FROM categories WHERE id = ? AND store_id = ?', [d.category_id, req.sid]))) throw err(400, 'Kategori tidak ditemukan');
-    const k = Object.keys(d);
-    if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ? AND store_id = ?`, [...k.map((c) => d[c]), req.params.id, req.sid]);
+    const cur = await t.one('SELECT id, item_id FROM products WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
+    if (!cur) throw err(404, 'Barang tidak ditemukan');
+    if (shared.barcode) await checkBarcode(t, shared.barcode, cur.item_id);
+    if (shared.sku) await checkBarcode(t, shared.sku, cur.item_id);
+    await checkCategory(t, shared.category_id);
+    let k = Object.keys(shared);
+    if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE item_id = ?`, [...k.map((c) => shared[c]), cur.item_id]);
+    k = Object.keys(store);
+    if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`, [...k.map((c) => store[c]), cur.id]);
   });
-  const row = await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ? AND p.store_id = ?`, [req.params.id, req.sid]);
-  if (!row) throw err(404, 'Barang tidak ditemukan');
-  res.json(row);
+  res.json(await db.one(`SELECT ${COLS} ${FROM} WHERE p.id = ? AND p.store_id = ?`, [req.params.id, req.sid]));
 }));
 
-// Hapus permanen hanya jika belum punya riwayat; selain itu dinonaktifkan
+// Hapus permanen hanya jika belum punya riwayat di toko mana pun; selain itu dinonaktifkan (semua toko)
 router.delete('/:id', auth, owner, wrap(async (req, res) => {
-  const used = await db.one('SELECT COUNT(*) AS n FROM stock_moves m JOIN products p ON p.id = m.product_id WHERE m.product_id = ? AND p.store_id = ?', [req.params.id, req.sid]);
-  if (used.n) {
-    await db.exec('UPDATE products SET active = 0 WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
+  const cur = await db.one('SELECT id, item_id FROM products WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
+  if (!cur) throw err(404, 'Barang tidak ditemukan');
+  const q = (tb) => db.one(`SELECT COUNT(*) AS n FROM ${tb} x JOIN products p ON p.id = x.product_id WHERE p.item_id = ?`, [cur.item_id]);
+  const used = (await q('stock_moves')).n + (await q('sale_items')).n + (await q('purchase_items')).n;
+  if (used) {
+    await db.exec('UPDATE products SET active = 0 WHERE item_id = ?', [cur.item_id]);
     return res.json({ ok: true, deactivated: true });
   }
-  await db.exec('DELETE FROM products WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
+  await db.exec('DELETE FROM products WHERE item_id = ?', [cur.item_id]);
   res.json({ ok: true });
 }));
 
@@ -129,29 +184,35 @@ router.post('/import', auth, owner, wrap(async (req, res) => {
   const result = { created: 0, updated: 0, errors: [] };
   const cfg = await settings.get(req.sid);
   await db.tx(async (t) => {
-    const cats = new Map((await t.query('SELECT id, name FROM categories WHERE store_id = ?', [req.sid])).map((c) => [c.name.toLowerCase(), c.id]));
+    const cats = new Map((await t.query('SELECT id, name FROM categories')).map((c) => [c.name.toLowerCase(), c.id]));
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       try {
         const b = { ...r };
         if (r.category) {
           const key = String(r.category).trim().toLowerCase();
-          if (key) { if (!cats.has(key)) cats.set(key, await t.insert('categories', { store_id: req.sid, name: String(r.category).trim() })); b.category_id = cats.get(key); }
+          if (key) { if (!cats.has(key)) cats.set(key, await t.insert('categories', { name: String(r.category).trim() })); b.category_id = cats.get(key); }
         }
         const d = clean(b, true);
         const conds = []; const cp = [];
         if (d.sku) { conds.push('sku = ?'); cp.push(d.sku); }
         if (d.barcode) { conds.push('barcode = ?'); cp.push(d.barcode); }
-        const ex = conds.length ? await t.one(`SELECT id FROM products WHERE store_id = ? AND (${conds.join(' OR ')})`, [req.sid, ...cp]) : null;
+        const ex = conds.length ? await t.one(`SELECT id, item_id FROM products WHERE store_id = ? AND (${conds.join(' OR ')})`, [req.sid, ...cp]) : null;
         if (ex) {
-          const k = Object.keys(d);
-          await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`, [...k.map((c) => d[c]), ex.id]);
+          const { shared, store } = catalog.split(d);
+          let k = Object.keys(shared);
+          if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE item_id = ?`, [...k.map((c) => shared[c]), ex.item_id]);
+          k = Object.keys(store);
+          if (k.length) await t.exec(`UPDATE products SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`, [...k.map((c) => store[c]), ex.id]);
           result.updated++;
         } else {
-          if (!d.sku) d.sku = await autoSku(t, req.sid);
+          if (!d.sku) d.sku = await autoSku(t);
           if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
+          await checkBarcode(t, d.sku, 0); await checkBarcode(t, d.barcode, 0);
+          defaultSell(d, cfg);
           d.store_id = req.sid; d.created_at = t.now(); d.stock = 0;
           const pid = await t.insert('products', d);
+          await t.exec('UPDATE products SET item_id = id WHERE id = ?', [pid]);
           const opening = round3(num(r.stock));
           if (opening) await stock.move(t, { store_id: req.sid, product_id: pid, qty: opening, type: 'OPENING', note: 'Stok awal (impor)', user_id: req.user.id, allowNegative: true });
           result.created++;
@@ -159,6 +220,7 @@ router.post('/import', auth, owner, wrap(async (req, res) => {
       } catch (e) { result.errors.push({ row: i + 1, error: e.message }); }
     }
     if (result.errors.length) throw Object.assign(new Error('Impor dibatalkan'), { status: 422, details: result });
+    await catalog.fillAllStores(t);
   });
   res.json(result);
 }));

@@ -28,37 +28,44 @@
     },
   }) });
 
-  // ================= Penjualan INAPROC =================
+  // ================= Penjualan Faktur (INAPROC / SP / Langsung) =================
   const monthStart = today.slice(0, 8) + '01';
-  A.route('invoices', { title: 'Penjualan INAPROC', render: (el) => A.list(el, {
-    title: 'Penjualan INAPROC', sub: 'Faktur ke perusahaan/instansi di luar POS. Stok tetap berkurang dan tercatat di laporan serta piutang.', initial: { from: monthStart, to: today },
-    filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. dokumen / pelanggan', grow: true }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
-    actions: '<a href="#/invoice/new"><button class="primary">Buat penjualan INAPROC</button></a>',
-    url: (q) => '/api/sales?kind=CUSTOM&' + POS.qs(q),
-    cols: [{ h: 'No. dokumen', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>` }, { h: 'Tanggal', f: (r) => POS.d(r.created_at.slice(0, 10)) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || '-') }, { h: 'No. kontrak', f: (r) => esc(r.contract_no || '') }, { h: 'No. SP', f: (r) => `<span class="mono" style="font-size:12px">${esc(r.po_ref || '')}</span>` }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
+  const KIND = { INAPROC: ['INAPROC', 'blue'], SP: ['SP', 'yellow'], LANGSUNG: ['Langsung', 'green'] };
+  A.kindTag = (k) => (KIND[k] ? A.tag(KIND[k][0], KIND[k][1]) : '');
+  A.route('invoices', { title: 'Penjualan Faktur', render: (el) => A.list(el, {
+    title: 'Penjualan Faktur', sub: 'Penjualan INAPROC, SP, dan Langsung ke perusahaan/instansi di luar POS. Stok tetap berkurang dan tercatat di laporan serta piutang.', initial: { from: monthStart, to: today, kind: 'FAKTUR' },
+    filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. dokumen / pelanggan', grow: true }, { name: 'kind', label: 'Jenis', type: 'select', options: [['FAKTUR', 'Semua jenis'], ['INAPROC', 'INAPROC'], ['SP', 'SP'], ['LANGSUNG', 'Langsung']] }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
+    actions: '<a href="#/invoice/new"><button class="primary">Buat penjualan faktur</button></a>',
+    url: (q) => '/api/sales?' + POS.qs({ ...q, kind: q.kind || 'FAKTUR' }),
+    cols: [{ h: 'No. dokumen', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>` }, { h: 'Jenis', f: (r) => A.kindTag(r.kind) }, { h: 'Tanggal', f: (r) => POS.d(r.created_at.slice(0, 10)) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || '-') }, { h: 'No. Kontrak / SP', f: (r) => `<span class="mono" style="font-size:12px">${esc(r.contract_no || '')}</span>` }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
     onRow: (r, reload) => A.saleDetail(r.id, reload),
     onAct: (act, r, reload) => A.saleDetail(r.id, reload),
   }) });
 
-  A.route('invoice', { title: 'Penjualan INAPROC baru', async render(el) {
+  const TYPE_INFO = {
+    INAPROC: 'Harga acuan INAPROC = harga offline + PPH + PPN. Harga boleh diubah per baris. PPN sudah termasuk dalam harga (tidak bisa diganti).',
+    SP: 'Harga = harga offline (acuan dari harga dasar), tidak bisa diedit. Subtotal di atas Rp 2.000.000 wajib PPN.',
+    LANGSUNG: 'Harga = harga offline (acuan dari harga dasar), tidak bisa diedit. Subtotal di atas Rp 2.000.000 wajib PPN.',
+  };
+  A.route('invoice', { title: 'Penjualan Faktur baru', async render(el) {
     const [cust, S] = [(await POS.get('/api/customers?limit=500&active=1')).rows, A.ST];
-    let customers = cust; let lines = []; let dueTouched = false;
-    const rate0 = 11; // tarif pajak bawaan; bisa diubah per transaksi
-    el.innerHTML = A.head('Penjualan INAPROC baru', 'Faktur di luar POS. Harga, nama barang, dan pajak diatur di sini dan tidak mengubah data master.', '<a href="#/invoices"><button>Kembali</button></a>') + `
-      <div class="card"><h3>Pelanggan &amp; dokumen</h3><div class="form-grid">
+    let customers = cust; let lines = []; let dueTouched = false; let type = 'INAPROC';
+    const minPpn = S.ppn_wajib_min || 2000000; const rate = S.price_ppn;
+    el.innerHTML = A.head('Penjualan Faktur baru', 'Faktur di luar POS. Harga diambil dari acuan harga (harga dasar + pengaturan), bukan dari harga jual di master barang.', '<a href="#/invoices"><button>Kembali</button></a>') + `
+      <div class="card"><h3>Jenis penjualan</h3>
+        <div class="seg" id="i_type" role="radiogroup" aria-label="Jenis penjualan">${Object.entries({ INAPROC: 'Penjualan INAPROC', SP: 'Penjualan SP', LANGSUNG: 'Penjualan Langsung' }).map(([k, v]) => `<button type="button" role="radio" data-t="${k}" aria-checked="${k === type}" class="${k === type ? 'primary' : ''}">${v}</button>`).join('')}</div>
+        <div class="hint" id="i_tinfo" style="margin-top:8px"></div></div>
+      <div class="card" style="margin-top:14px"><h3>Pelanggan &amp; dokumen</h3><div class="form-grid">
         <div><label class="f">Pelanggan (perusahaan / instansi) *</label><div style="display:flex;gap:6px"><select id="i_cust"></select><button type="button" class="sm" id="i_newc" style="white-space:nowrap">Baru</button></div></div>
         <div><label class="f">Nomor dokumen</label><input id="i_no" placeholder="otomatis"><div class="hint" id="i_nohint"></div></div>
         <div><label class="f">Tanggal dokumen</label><input type="date" id="i_date" value="${today}"></div>
         <div><label class="f">Jatuh tempo pembayaran</label><input type="date" id="i_due" value="${plus(today, S.default_due_days || 14)}"></div>
-        <div><label class="f">No. kontrak</label><input id="i_ctr" autocomplete="off"></div>
-        <div><label class="f">Tanggal kontrak</label><input type="date" id="i_ctrd"></div>
-        <div class="span2"><label class="f">No. surat pesanan (SP)</label><input id="i_po" autocomplete="off" placeholder="Contoh: EP-01M47T6VJVV4KBCBZ0HWNPG0NN"></div>
+        <div><label class="f">No. Kontrak / SP</label><input id="i_ctr" autocomplete="off" placeholder="Contoh: EP-01M47T6VJVV4KBCBZ0HWNPG0NN"></div>
+        <div><label class="f">Tanggal Kontrak / SP</label><input type="date" id="i_ctrd"></div>
       </div></div>
       <div class="card" style="margin-top:14px"><h3>Barang</h3><div id="i_items"></div></div>
       <div class="card" style="margin-top:14px"><h3>Pajak, pembayaran &amp; catatan</h3><div class="form-grid">
-        <div><label class="f">Pajak</label><select id="i_tax"><option value="NONE">Tanpa pajak</option><option value="EXCLUDE">Belum termasuk pajak (ditambahkan)</option><option value="INCLUDE">Harga sudah termasuk pajak</option></select></div>
-        <div><label class="f">Tarif pajak (%)</label><input id="i_rate" value="${rate0}" inputmode="decimal"></div>
-        <div><label class="f">Diskon (Rp)</label><input id="i_disc" value="0" inputmode="decimal"></div>
+        <div><label class="f">Pajak</label><select id="i_tax"><option value="NONE">Tanpa PPN</option><option value="EXCLUDE">PPN ${rate}% ditambahkan</option></select><div class="hint" id="i_taxhint"></div></div>
         <div><label class="f">Dibayar di muka (Rp)</label><input id="i_paid" value="0" inputmode="decimal"><div class="hint">0 = belum dibayar, otomatis tercatat sebagai piutang.</div></div>
         <div><label class="f">Metode pembayaran</label><select id="i_method">${Object.entries(POS.METHOD).filter(([k]) => k !== 'KREDIT').map(([k, v]) => `<option value="${k}" ${k === 'TRANSFER' ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
         <div><label class="f">Catatan</label><input id="i_note"></div>
@@ -71,7 +78,6 @@
       const c = await A.form({ title: 'Pelanggan baru', fields: [{ name: 'name', label: 'Nama perusahaan / instansi', required: true, span: 2 }, { name: 'address', label: 'Alamat', span: 2 }, { name: 'spp_to', label: 'Alamat tujuan SPP (Kepada Yth.)', type: 'textarea', rows: 2, span: 2 }, { name: 'phone', label: 'Telepon' }, { name: 'npwp', label: 'NPWP' }], onSubmit: (v) => POS.post('/api/customers', v) });
       if (c && c.id) { customers = [...customers, c]; drawCust(c.id); }
     };
-    // nomor otomatis (pratinjau)
     const peek = A.debounce(async () => { try { const r = await POS.get('/api/invoices/next-no?date=' + ($('#i_date', el).value || today)); $('#i_nohint', el).textContent = 'Berikutnya: ' + r.no; } catch (_) {} }, 200);
     peek();
     $('#i_date', el).addEventListener('change', () => { peek(); if (!dueTouched) $('#i_due', el).value = plus($('#i_date', el).value || today, S.default_due_days || 14); });
@@ -80,45 +86,60 @@
     // ----- baris barang -----
     const num = (v) => POS.toNum(v) || 0;
     const itemsEl = $('#i_items', el);
-    const lineTotal = (l) => Math.max(num(l.qty) * num(l.price) - num(l.discount), 0);
+    const lineTotal = (l) => Math.max(num(l.qty) * num(l.price), 0);
+    const editable = () => type === 'INAPROC';
+    const refPrice = (l) => { const c = POS.priceCalc(l.buy_price, S); return type === 'INAPROC' ? c.inaproc : c.offline; };
     function draw() {
-      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang (tampil di dokumen)</th><th style="width:78px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:130px">Harga</th><th class="r" style="width:100px">Diskon</th><th class="r" style="width:120px">Jumlah</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td><input data-k="name" value="${esc(l.name)}"><div class="muted" style="font-size:11.5px"><span class="mono">${esc(l.sku || '')}</span> &middot; stok ${nf(l.stock)} ${esc(l.base_unit || '')} &middot; harga master ${money(l.master_price)}</div></td><td><input data-k="unit" value="${esc(l.unit)}"></td><td><input class="r" data-k="qty" value="${esc(String(l.qty).replace('.', ','))}" inputmode="decimal"></td><td><input class="r" data-k="price" value="${esc(String(l.price).replace('.', ','))}" inputmode="decimal"></td><td><input class="r" data-k="discount" value="${esc(String(l.discount).replace('.', ','))}" inputmode="decimal"></td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td><button class="sm danger" data-del>&times;</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty" style="padding:22px">Belum ada barang. Klik "Tambah barang" atau tekan Insert.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
+      const ed = editable();
+      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang</th><th style="width:84px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:140px">Harga${ed ? '' : ' (acuan)'}</th><th class="r" style="width:130px">Jumlah</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td>${ed ? `<input data-k="name" value="${esc(l.name)}">` : esc(l.name)}${l.buy_price > 0 ? '' : '<div class="hint" style="color:var(--red)">Harga dasar belum diisi di master barang</div>'}<div class="muted" style="font-size:11.5px">${esc(l.sku)} &middot; stok ${nf(l.stock)}</div></td><td>${ed ? `<input data-k="unit" value="${esc(l.unit)}">` : esc(l.unit)}</td><td><input class="r mono" data-k="qty" value="${esc(l.qty)}" inputmode="decimal"></td><td class="r">${ed ? `<input class="r mono" data-k="price" value="${esc(l.price)}" inputmode="decimal">${num(l.price) !== refPrice(l) ? `<div class="muted" style="font-size:11.5px">acuan ${money(refPrice(l))}</div>` : ''}` : `<span class="mono">${money(l.price)}</span>`}</td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td><button class="sm danger" data-del title="Hapus baris">&times;</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted center" style="padding:18px">Belum ada barang. Tekan Insert atau klik Tambah barang.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
       tot();
     }
     async function add() {
       const p = await A.pickProduct(); if (!p) return;
       const ex = lines.find((l) => l.product_id === p.id);
-      if (ex) ex.qty = num(ex.qty) + 1; else lines.push({ product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, base_unit: p.unit, stock: p.stock, master_price: p.sell_price, qty: 1, price: p.sell_price, discount: 0 });
+      if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, buy_price: p.buy_price, qty: 1, edited: false }; l.price = refPrice(l); lines.push(l); }
       draw();
     }
     itemsEl.addEventListener('click', (e) => { if (e.target.closest('[data-add]')) add(); const d = e.target.closest('[data-del]'); if (d) { lines.splice(+d.closest('tr').dataset.n, 1); draw(); } });
     // ubah di tempat: jangan menggambar ulang tabel agar fokus keyboard tidak hilang saat pindah kolom
-    itemsEl.addEventListener('input', (e) => { const k = e.target.dataset.k; if (!k) return; const tr = e.target.closest('tr'); const l = lines[+tr.dataset.n]; l[k] = e.target.value; tr.querySelector('[data-lt]').textContent = money(lineTotal(l)); tot(); });
+    itemsEl.addEventListener('input', (e) => { const k = e.target.dataset.k; if (!k) return; const tr = e.target.closest('tr'); const l = lines[+tr.dataset.n]; l[k] = e.target.value; if (k === 'price') l.edited = true; tr.querySelector('[data-lt]').textContent = money(lineTotal(l)); tot(); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Insert') { e.preventDefault(); add(); } });
+
+    // ----- jenis penjualan: memengaruhi harga & pajak -----
+    function setType(t) {
+      type = t;
+      $$('#i_type button', el).forEach((b) => { const on = b.dataset.t === t; b.setAttribute('aria-checked', String(on)); b.classList.toggle('primary', on); });
+      $('#i_tinfo', el).textContent = TYPE_INFO[t];
+      for (const l of lines) { if (t !== 'INAPROC') l.edited = false; if (!l.edited) l.price = refPrice(l); }
+      $('#i_tax', el).closest('div').classList.toggle('hidden', t === 'INAPROC');
+      draw();
+    }
+    $('#i_type', el).addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) setType(b.dataset.t); });
 
     // ----- ringkasan (rumus sama dengan server) -----
     function calc() {
       const sub = Math.round(lines.reduce((a, l) => a + lineTotal(l), 0) * 100) / 100;
-      const disc = num($('#i_disc', el).value); const base = Math.max(sub - disc, 0);
-      const mode = $('#i_tax', el).value; const rate = mode === 'NONE' ? 0 : num($('#i_rate', el).value);
-      let tax = 0, total = base;
-      if (mode === 'EXCLUDE') { tax = Math.round(base * rate) / 100; total = base + tax; } else if (mode === 'INCLUDE') { tax = base - base / (1 + rate / 100); }
-      return { subtotal: sub, discount: disc, tax: Math.round(tax * 100) / 100, total: Math.round(total * 100) / 100, paid: num($('#i_paid', el).value), mode, rate };
+      let mode; let tax = 0; let total = sub;
+      if (type === 'INAPROC') { mode = 'INCLUDE'; tax = sub - sub / (1 + rate / 100); }
+      else { mode = sub > minPpn ? 'EXCLUDE' : $('#i_tax', el).value; if (mode === 'EXCLUDE') { tax = Math.round(sub * rate) / 100; total = sub + tax; } else mode = 'NONE'; }
+      return { subtotal: sub, discount: 0, tax: Math.round(tax * 100) / 100, total: Math.round(total * 100) / 100, paid: num($('#i_paid', el).value), mode, rate: mode === 'NONE' ? 0 : rate };
     }
-    function tot() { const c = calc(); $('#i_tot', el).innerHTML = A.totalsBox(c) + (c.paid && c.paid < c.total ? `<div class="muted" style="text-align:right;margin-top:6px">Sisa tagihan (piutang): <b class="mono">${money(c.total - c.paid)}</b></div>` : '') + (c.mode !== 'NONE' ? `<div class="muted" style="text-align:right;margin-top:6px">${c.mode === 'EXCLUDE' ? 'Pajak ditambahkan di atas harga' : 'Harga sudah termasuk pajak; nilai pajak: ' + money(c.tax)}</div>` : ''); }
-    ['#i_tax', '#i_rate', '#i_disc', '#i_paid'].forEach((s) => { $(s, el).addEventListener('input', tot); $(s, el).addEventListener('change', tot); });
-    $('#i_tax', el).addEventListener('change', () => { $('#i_rate', el).disabled = $('#i_tax', el).value === 'NONE'; });
-    $('#i_rate', el).disabled = true;
-    draw();
+    function tot() {
+      const c = calc(); const sel = $('#i_tax', el);
+      if (type !== 'INAPROC') { const must = c.subtotal > minPpn; if (must) sel.value = 'EXCLUDE'; sel.disabled = must; $('#i_taxhint', el).textContent = must ? `Subtotal di atas ${rp(minPpn)}: PPN wajib` : `PPN wajib bila subtotal di atas ${rp(minPpn)}`; }
+      $('#i_tot', el).innerHTML = A.totalsBox(c) + (c.paid && c.paid < c.total ? `<div class="muted" style="text-align:right;margin-top:6px">Sisa tagihan (piutang): <b class="mono">${money(c.total - c.paid)}</b></div>` : '');
+    }
+    ['#i_tax', '#i_paid'].forEach((s) => { $(s, el).addEventListener('input', tot); $(s, el).addEventListener('change', tot); });
+    setType('INAPROC');
 
     async function save() {
       const err = $('#i_err', el); err.classList.add('hidden'); const btn = $('#i_save', el);
       const c = calc();
       const body = {
-        customer_id: $('#i_cust', el).value, doc_no: $('#i_no', el).value.trim(), doc_date: $('#i_date', el).value, due_date: $('#i_due', el).value || null,
-        contract_no: $('#i_ctr', el).value.trim(), contract_date: $('#i_ctrd', el).value || null, po_ref: $('#i_po', el).value.trim(),
-        tax_mode: c.mode, tax_rate: c.rate, discount: c.discount, paid: c.paid, method: $('#i_method', el).value, note: $('#i_note', el).value,
-        items: lines.map((l) => ({ product_id: l.product_id, name: l.name, unit: l.unit, qty: num(l.qty), price: num(l.price), discount: num(l.discount) })),
+        type, customer_id: $('#i_cust', el).value, doc_no: $('#i_no', el).value.trim(), doc_date: $('#i_date', el).value, due_date: $('#i_due', el).value || null,
+        contract_no: $('#i_ctr', el).value.trim(), contract_date: $('#i_ctrd', el).value || null,
+        tax_mode: c.mode, paid: c.paid, method: $('#i_method', el).value, note: $('#i_note', el).value,
+        items: lines.map((l) => ({ product_id: l.product_id, name: l.name, unit: l.unit, qty: num(l.qty), price: type === 'INAPROC' ? num(l.price) : undefined })),
       };
       try {
         if (!body.customer_id) throw new Error('Pilih pelanggan');
@@ -193,6 +214,9 @@
     });
     await load();
   };
+
+  // Modal terpisah: daftar dokumen + unggah (dibuka dari tombol "Dokumen" di detail penjualan faktur)
+  A.saleDocsModal = (saleId, no) => { const m = A.dialog('Dokumen ' + no, '<div id="sd_docs"></div>'); return A.saleDocs(m.el.querySelector('#sd_docs'), saleId); };
 
   // ================= Master Dokumen =================
   A.crud('doctypes', { title: 'Master Dokumen', sub: 'Jenis dokumen yang bisa diunggah pada Penjualan INAPROC. Pilihan "Lainnya" selalu tersedia di layar unggah.', endpoint: '/api/doc-types', newLabel: 'Tambah jenis dokumen',

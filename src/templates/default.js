@@ -209,7 +209,7 @@ function paymentRequest(doc, s, d) {
   doc.text('Dengan hormat,', M, doc.y);
   doc.moveDown(0.4);
   const intro = d.side === 'sale'
-    ? `Bersama surat ini kami, ${s.store_name}, mengajukan permohonan pembayaran atas transaksi pembelian barang${d.po_ref ? ' sehubungan dengan Surat Pesanan ' + d.po_ref : ''}${d.contract_no ? ' (Kontrak No. ' + d.contract_no + ')' : ''} sebagaimana rincian berikut:`
+    ? `Bersama surat ini kami, ${s.store_name}, mengajukan permohonan pembayaran atas transaksi pembelian barang${d.contract_no ? ' sehubungan dengan Kontrak / Surat Pesanan No. ' + d.contract_no : ''} sebagaimana rincian berikut:`
     : `Bersama surat ini kami mengajukan permohonan agar dilakukan pembayaran kepada pemasok ${d.party.name} atas pembelian barang sebagaimana rincian berikut:`;
   doc.text(intro, M, doc.y, { width: W, align: 'justify', lineGap: 2 });
   doc.moveDown(0.7);

@@ -14,8 +14,8 @@ const extOf = (n) => (String(n).match(/\.([A-Za-z0-9]{1,5})$/) || [])[1]?.toLowe
 
 router.use(auth, owner);
 async function mySale(req) {
-  const s = await db.one("SELECT id FROM sales WHERE id = ? AND store_id = ? AND kind = 'CUSTOM'", [+req.params.id, req.sid]);
-  if (!s) throw err(404, 'Penjualan INAPROC tidak ditemukan');
+  const s = await db.one("SELECT id FROM sales WHERE id = ? AND store_id = ? AND kind <> 'POS'", [+req.params.id, req.sid]);
+  if (!s) throw err(404, 'Penjualan faktur tidak ditemukan');
   return s.id;
 }
 const COLS = 'd.id, d.sale_id, d.type_id, d.title, d.file_name, d.mime, d.size, d.created_at, t.name AS type_name';

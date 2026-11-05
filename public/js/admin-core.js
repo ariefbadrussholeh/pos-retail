@@ -20,7 +20,7 @@
     const [name, ...rest] = (location.hash.replace(/^#\//, '') || 'dashboard').split('/');
     const r = A.routes[name] || A.routes.dashboard;
     $$('#nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#/' + (A.routes[name] ? name : 'dashboard')));
-    $('#side').classList.remove('open');
+    $('#side').classList.remove('open'); $('#scrim') && $('#scrim').classList.remove('on'); A.openActiveGroup && A.openActiveGroup();
     // Wadah baru di setiap navigasi: listener halaman sebelumnya ikut terbuang (tidak menumpuk)
     const old = $('#view'); const v = old.cloneNode(false); old.replaceWith(v); document.onkeydown = null;
     v.innerHTML = '<div class="empty">Memuat...</div>';
@@ -32,7 +32,7 @@
 
   // ---------- Dialog & form ----------
   // fields: {name,label,type,options,required,span,hint,placeholder,rows}
-  A.form = function ({ title, fields, values = {}, submit = 'Simpan', wide, onSubmit, hint }) {
+  A.form = function ({ title, fields, values = {}, submit = 'Simpan', wide, onSubmit, hint, onOpen }) {
     const f = (x) => {
       if (x.type === 'note') return `<div class="span2">${x.hint || ''}</div>`;
       const v = values[x.name] ?? x.value ?? ''; const id = 'ff_' + x.name; const req = x.required ? ' *' : '';
@@ -58,6 +58,7 @@
       },
     });
     const el = m.el; let busy = false;
+    if (onOpen) onOpen(el);
     async function save() {
       if (busy) return; const out = {}; const err = $('#ferr', el); err.classList.add('hidden');
       for (const x of fields) {
@@ -174,21 +175,87 @@
   };
 
   // ---------- Awal ----------
-  // Pemilih toko di sidebar: pindah toko = muat ulang halaman dengan toko baru
+  const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    cart: '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.5 12h11L21 7H6"/>',
+    file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+    bag: '<path d="M6 7h12l1 13H5z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
+    inbox: '<path d="M4 13l2-8h12l2 8"/><path d="M4 13v6h16v-6h-5a3 3 0 0 1-6 0z"/>',
+    check: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 13l2 2 4-4"/>',
+    box: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1"/>',
+    truck: '<path d="M2 6h11v10H2zM13 10h5l3 3v3h-8"/><circle cx="6" cy="18" r="1.7"/><circle cx="17" cy="18" r="1.7"/>',
+    users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M18 14c1.9.7 3 2.5 3 4.5"/>',
+    folder: '<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+    chart: '<path d="M4 20V4M4 20h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/>',
+    store: '<path d="M4 9l1.5-5h13L20 9"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/>',
+    user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
+    db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', cv: '<path d="M6 9l6 6 6-6"/>',
+  };
+  // [kunci grup, judul grup, [[rute, label, ikon], ...]]; grup tanpa judul = selalu tampil
+  A.NAV = [
+    ['', '', [['dashboard', 'Dashboard', 'home']]],
+    ['trx', 'Transaksi', [['sales', 'Semua Penjualan', 'cart'], ['invoices', 'Penjualan Faktur', 'file'], ['purchases', 'Pembelian', 'bag'], ['receipts', 'Penerimaan', 'inbox'], ['opnames', 'Stok Opname', 'check']]],
+    ['data', 'Data', [['products', 'Barang', 'box'], ['categories', 'Kategori', 'tag'], ['suppliers', 'Pemasok', 'truck'], ['customers', 'Pelanggan', 'users'], ['doctypes', 'Master Dokumen', 'folder']]],
+    ['rep', 'Laporan', [['stockcard', 'Kartu Stok', 'layers'], ['reports', 'Laporan & Excel', 'chart']]],
+    ['sys', 'Sistem', [['stores', 'Toko', 'store'], ['users', 'Pengguna', 'user'], ['backup', 'Backup & Restore', 'db'], ['settings', 'Identitas & Pengaturan', 'gear']]],
+  ];
+  const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (_) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* abaikan */ } };
+  A.renderNav = () => {
+    const closed = lsGet('pos_navgrp', {});
+    $('#nav').innerHTML = A.NAV.map(([key, title, items], gi) => {
+      const links = items.map(([r, t, ic]) => `<a href="#/${r}" title="${esc(t)}">${I(ICON[ic])}<span>${esc(t)}</span></a>`).join('');
+      if (!key) return `<div class="gi">${links}</div>`;
+      return `<div class="gsep"></div><button class="gh" data-g="${key}" aria-expanded="${closed[key] ? 'false' : 'true'}"><span>${esc(title)}</span>${I(ICON.cv).replace('<svg', '<svg class="cv"')}</button><div class="gi" data-gi="${key}" ${closed[key] ? 'hidden' : ''}>${links}</div>`;
+    }).join('');
+    $('#nav').onclick = (e) => {
+      const g = e.target.closest('.gh'); if (!g) return;
+      const c = lsGet('pos_navgrp', {}); const open = g.getAttribute('aria-expanded') === 'true';
+      c[g.dataset.g] = open; lsSet('pos_navgrp', c); g.setAttribute('aria-expanded', String(!open));
+      $(`[data-gi="${g.dataset.g}"]`).hidden = open;
+    };
+  };
+  // buka grup tempat halaman aktif berada
+  A.openActiveGroup = () => {
+    const a = $('#nav a.on'); const gi = a && a.closest('[data-gi]'); if (!gi || !gi.hidden) return;
+    gi.hidden = false; const h = $(`.gh[data-g="${gi.dataset.gi}"]`); if (h) h.setAttribute('aria-expanded', 'true');
+    const c = lsGet('pos_navgrp', {}); delete c[gi.dataset.gi]; lsSet('pos_navgrp', c);
+  };
+  // Pemilih toko di topbar: pindah toko = muat ulang halaman dengan toko baru
   A.renderStoreBox = () => {
     const sb = $('#storebox'); if (!sb) return;
-    sb.innerHTML = `<label class="f" for="storeSel">Toko aktif</label><select id="storeSel">${A.ME.stores.map((s) => `<option value="${s.id}" ${s.id === A.ME.store.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})${s.active ? '' : ' - nonaktif'}</option>`).join('')}</select>`;
-    $('#storeSel').onchange = (e) => { POS.setStore(e.target.value); location.hash = location.hash.startsWith('#/dashboard') ? location.hash : '#/dashboard'; location.reload(); };
+    sb.innerHTML = A.ME.stores.length < 2 && !A.ME.stores[0] ? '' : `<label class="f" for="storeSel">Toko</label><select id="storeSel">${A.ME.stores.map((s) => `<option value="${s.id}" ${s.id === A.ME.store.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})${s.active ? '' : ' - nonaktif'}</option>`).join('')}</select>`;
+    const sel = $('#storeSel'); if (sel) sel.onchange = (e) => { POS.setStore(e.target.value); location.hash = location.hash.startsWith('#/dashboard') ? location.hash : '#/dashboard'; location.reload(); };
   };
-  A.refreshBrand = () => { $('#brand').innerHTML = POS.brand(A.ST); };
+  // Sidebar hanya berisi logo toko (tanpa nama)
+  A.refreshBrand = () => {
+    const st = A.ST || {};
+    $('#brand').innerHTML = st.logo || st.has_logo ? `<img src="${POS.logo()}v=${(st.store_name || '').length}" alt="${esc(st.store_name || '')}" class="brand-logo">` : I(ICON.store).replace('<svg', '<svg class="brand-mark"');
+    document.title = (document.title.split(' - ')[0] || 'Admin') + ' - ' + (st.store_name || '');
+  };
   A.init = async function () {
     try { A.ME = await POS.me(); A.ST = await POS.get('/api/settings'); } catch (_) { return; }
     if (A.ME.role !== 'owner') { location.href = '/pos.html'; return; }
-    A.renderStoreBox();
-    A.refreshBrand(); $('#meName').textContent = A.ME.name; $('#meRole').textContent = 'Owner';
+    A.renderNav(); A.renderStoreBox(); A.refreshBrand();
+    $('#meName').textContent = A.ME.name; $('#meRole').textContent = 'Owner'; $('#meAv').textContent = (A.ME.name || '?').trim().charAt(0).toUpperCase();
+    $('#menu').innerHTML = I(ICON.menu);
+    // sidebar: ciut ke ikon (desktop) / laci (ponsel)
+    const shell = $('#shell'); const mob = () => matchMedia('(max-width: 760px)').matches;
+    if (lsGet('pos_rail', false)) shell.classList.add('rail');
+    const closeDrawer = () => { $('#side').classList.remove('open'); $('#scrim').classList.remove('on'); };
+    $('#menu').onclick = () => { if (mob()) { const o = $('#side').classList.toggle('open'); $('#scrim').classList.toggle('on', o); } else { const r = shell.classList.toggle('rail'); lsSet('pos_rail', r); } };
+    $('#scrim').onclick = closeDrawer; $('#nav').addEventListener('click', (e) => { if (e.target.closest('a')) closeDrawer(); });
+    // menu pengguna (topbar kanan atas)
+    const um = $('#umMenu'); const closeUm = () => { um.classList.add('hidden'); $('#umBtn').setAttribute('aria-expanded', 'false'); };
+    $('#umBtn').onclick = (e) => { e.stopPropagation(); const h = um.classList.toggle('hidden'); $('#umBtn').setAttribute('aria-expanded', String(!h)); };
+    document.addEventListener('click', (e) => { if (!e.target.closest('.um')) closeUm(); }); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUm(); });
     $('#out').onclick = async () => { await POS.post('/api/auth/logout'); location.href = '/'; };
-    $('#menu').onclick = () => $('#side').classList.toggle('open');
-    $('#pw').onclick = () => A.form({ title: 'Ganti password', fields: [{ name: 'old_password', label: 'Password lama', type: 'password', required: true, span: 2 }, { name: 'new_password', label: 'Password baru (min. 6 karakter)', type: 'password', required: true, span: 2 }], onSubmit: (v) => POS.post('/api/auth/password', v) }).then((ok) => ok && toast('Password diganti', 'ok'));
+    $('#pw').onclick = () => { closeUm(); return A.form({ title: 'Ganti password', fields: [{ name: 'old_password', label: 'Password lama', type: 'password', required: true, span: 2 }, { name: 'new_password', label: 'Password baru (min. 6 karakter)', type: 'password', required: true, span: 2 }], onSubmit: (v) => POS.post('/api/auth/password', v) }).then((ok) => ok && toast('Password diganti', 'ok')); };
     go();
   };
   window.addEventListener('DOMContentLoaded', () => setTimeout(() => A.init(), 0));

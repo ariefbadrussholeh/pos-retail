@@ -31,15 +31,30 @@
   async function catOptions(all) { const c = (await POS.get('/api/categories?limit=500')).rows; return [[all ? '' : '', all ? 'Semua kategori' : '(tanpa kategori)'], ...c.map((x) => [x.id, x.name])]; }
   function productFields(cats, creating) {
     return [
+      { type: 'note', hint: `<div class="hint">Nama, SKU, barcode, kategori, dan satuan berlaku untuk <b>semua toko</b>. Harga dasar, harga jual, grosir, dan stok minimum khusus <b>${esc(A.ME.store.name)}</b>.</div>` },
       { name: 'name', label: 'Nama barang', required: true, span: 2 },
       { name: 'sku', label: 'SKU / kode', scan: true, hint: creating ? 'Kosong = dibuat otomatis' : '' },
       { name: 'barcode', label: 'Barcode', scan: true, cam: true, gen: async () => (await POS.post('/api/products/barcode/next')).barcode, hint: creating ? 'Scan barcode kemasan, atau klik Buat otomatis' : '' },
       { name: 'category_id', label: 'Kategori', type: 'select', options: cats }, { name: 'unit', label: 'Satuan', placeholder: 'pcs, kg, box' },
-      { name: 'buy_price', label: 'Harga beli', type: 'number' }, { name: 'sell_price', label: 'Harga jual', type: 'number', required: true },
+      { name: 'buy_price', label: 'Harga dasar', type: 'number', hint: 'Dasar acuan harga jual dan harga INAPROC' }, { name: 'sell_price', label: 'Harga jual POS (kasir)', type: 'number', required: true, hint: creating ? 'Terisi otomatis dari acuan harga offline; boleh diubah' : 'Hanya untuk tampil di kasir (POS)' },
+      { type: 'note', hint: '<div id="acuan" class="hint" style="line-height:1.6"></div>' },
       { name: 'wholesale_price', label: 'Harga grosir', type: 'number', hint: 'Opsional' }, { name: 'wholesale_min', label: 'Min. qty grosir', type: 'number', hint: 'Harga grosir berlaku mulai qty ini' },
       { name: 'min_stock', label: 'Stok minimum', type: 'number', hint: 'Untuk peringatan stok menipis' },
-      creating ? { name: 'stock', label: 'Stok awal', type: 'number' } : { name: 'active', label: 'Barang aktif (tampil di kasir)', type: 'checkbox' },
+      creating ? { name: 'stock', label: 'Stok awal (toko ini)', type: 'number' } : { name: 'active', label: 'Barang aktif (tampil di kasir, semua toko)', type: 'checkbox' },
     ];
+  }
+  // Acuan harga di bawah kolom harga: harga offline, harga INAPROC; sell_price terisi otomatis saat barang baru
+  function bindAcuan(el, creating) {
+    const buy = el.querySelector('#ff_buy_price'); const sell = el.querySelector('#ff_sell_price'); const box = el.querySelector('#acuan'); let touched = !creating;
+    const fm = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+    const draw = () => {
+      const c = POS.priceCalc(POS.toNum(buy.value) || 0, A.ST);
+      box.innerHTML = `Acuan: (dasar ${fm(c.dasar)} + akomodasi ${fm(c.akomodasi)}) + laba ${A.ST.price_laba}% = <b>harga offline ${fm(c.offline)}</b> &middot; harga INAPROC (+ PPH ${A.ST.price_pph}% + PPN ${A.ST.price_ppn}%) = <b>${fm(c.inaproc)}</b> <button type="button" class="sm" data-use>Pakai harga offline</button>`;
+      if (!touched) sell.value = String(c.offline);
+    };
+    buy.addEventListener('input', draw); sell.addEventListener('input', () => { touched = true; });
+    box.addEventListener('click', (e) => { if (e.target.closest('[data-use]')) { sell.value = String(POS.priceCalc(POS.toNum(buy.value) || 0, A.ST).offline); touched = true; } });
+    draw();
   }
   function parseCSV(text) {
     const first = text.split('\n')[0]; const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
@@ -75,15 +90,16 @@
   A.route('products', { title: 'Barang', async render(el) {
     const cats = await catOptions(false); const catsAll = await catOptions(true);
     await A.list(el, {
-      title: 'Barang', sub: 'Master barang, harga, dan stok saat ini',
-      actions: '<button data-act="fill">Barcode otomatis</button><button data-act="labels">Cetak label</button><button data-act="import">Impor CSV</button><button data-act="export">Ekspor Excel</button><button class="primary" data-act="new">Tambah barang</button>',
+      title: 'Barang', sub: 'Master barang bersama semua toko. Stok, harga dasar, dan harga jual di sini khusus toko aktif.',
+      actions: '<button data-act="fill">Barcode otomatis</button><button data-act="labels">Cetak label</button><button data-act="import">Impor CSV</button><button data-act="export">Ekspor stok</button><button data-act="ecat">Excel E-Katalog</button><button class="primary" data-act="new">Tambah barang</button>',
       filters: [{ name: 'q', label: 'Cari', placeholder: 'Nama, SKU, atau barcode', grow: true }, { name: 'category_id', label: 'Kategori', type: 'select', options: catsAll }, { name: 'low', label: 'Filter', type: 'check', text: 'Stok menipis' }],
       url: (q) => '/api/products?' + POS.qs(q),
       cols: [
         { h: 'SKU', f: (r) => `<span class="mono">${esc(r.sku)}</span>` }, { h: 'Barcode', f: (r) => `<span class="mono muted">${esc(r.barcode || '')}</span>` },
         { h: 'Nama', f: (r) => esc(r.name) + (r.category ? `<div class="muted" style="font-size:12px">${esc(r.category)}</div>` : '') + (r.active ? '' : ' ' + A.tag('nonaktif', 'red')) },
-        { h: 'Sat', f: (r) => esc(r.unit) }, { h: 'Harga beli', cls: 'r mono', f: (r) => money(r.buy_price) },
+        { h: 'Sat', f: (r) => esc(r.unit) }, { h: 'Harga dasar', cls: 'r mono', f: (r) => money(r.buy_price) },
         { h: 'Harga jual', cls: 'r mono', f: (r) => money(r.sell_price) + (r.wholesale_price ? `<div class="muted" style="font-size:11.5px">grosir ${money(r.wholesale_price)} @${nf(r.wholesale_min)}</div>` : '') },
+        { h: 'E-Katalog', cls: 'r mono', f: (r) => `<span title="Acuan harga INAPROC (offline + PPH + PPN)">${money(POS.priceCalc(r.buy_price, A.ST).inaproc)}</span>` },
         { h: 'Stok', cls: 'r mono', f: (r) => `<span style="${r.stock <= r.min_stock ? 'color:var(--red);font-weight:600' : ''}">${nf(r.stock)}</span>` },
         { h: '', cls: 'r', f: () => A.btn('edit', 'Ubah') + ' ' + A.btn('label', 'Label') + ' ' + A.btn('card', 'Kartu stok') + ' ' + A.btn('del', 'Hapus', 'sm danger') },
       ],
@@ -92,11 +108,12 @@
         if (act === 'labels') return labelDialog(rows);
         if (act === 'fill') { if (await POS.confirm('Beri barcode EAN-13 otomatis ke semua barang aktif yang belum punya barcode?', 'Buat barcode')) { try { const r = await POS.post('/api/products/barcode/fill'); toast(r.filled + ' barang diberi barcode', 'ok'); reload(); } catch (e) { toast(e.message, 'err'); } } return; }
         if (act === 'export') return A.download('/api/reports/stock/excel');
+        if (act === 'ecat') return A.download('/api/products/export/ecatalog');
         if (act === 'import') return importDialog(reload);
         if (act === 'card') { sessionStorage.setItem('stockcard.product', JSON.stringify({ id: row.id, name: row.name })); location.hash = '#/stockcard'; return; }
         if (act === 'del') { if (await POS.confirm(`Hapus "${row.name}"? Barang yang sudah punya riwayat hanya dinonaktifkan.`, 'Hapus', true)) { const r = await POS.del('/api/products/' + row.id).catch((e) => toast(e.message, 'err')); if (r) { toast(r.deactivated ? 'Barang dinonaktifkan (punya riwayat)' : 'Dihapus', 'ok'); reload(); } } return; }
         const creating = act === 'new';
-        const ok = await A.form({ title: creating ? 'Tambah barang' : 'Ubah barang', wide: true, fields: productFields(cats, creating), values: creating ? { unit: 'pcs' } : row, onSubmit: (v) => { v.category_id = v.category_id || null; return creating ? POS.post('/api/products', v) : POS.put('/api/products/' + row.id, v); } });
+        const ok = await A.form({ title: creating ? 'Tambah barang' : 'Ubah barang', wide: true, fields: productFields(cats, creating), values: creating ? { unit: 'pcs' } : row, onOpen: (e) => bindAcuan(e, creating), onSubmit: (v) => { v.category_id = v.category_id || null; return creating ? POS.post('/api/products', v) : POS.put('/api/products/' + row.id, v); } });
         if (ok) { toast('Barang tersimpan', 'ok'); reload(); }
       },
     });
@@ -177,6 +194,10 @@
       <div class="card sect"><h2>Struk</h2><p>Teks tambahan dan ukuran kertas.</p><div class="form-grid">${inp('receipt_header', 'Teks di atas struk', { span: 2, area: 2, hint: 'Opsional, satu baris per teks' })}${inp('receipt_footer', 'Teks di bawah struk', { span: 2, area: 2 })}${inp('paper_width', 'Lebar kertas bawaan', { opts: [['58', '58 mm'], ['80', '80 mm']] })}<div></div>${chk('receipt_show_logo', 'Cetak logo di struk', 'Logo ikut tercetak pada printer ESC/POS dan cetak browser')}${chk('receipt_show_npwp', 'Cetak NPWP di struk')}</div></div>
       <div class="card sect"><h2>Pajak, stok & barcode</h2><p>Berlaku untuk transaksi dan barang baru.</p><div class="form-grid">${inp('tax_percent', 'Pajak (%)', { hint: '0 = tanpa pajak' })}${inp('tax_label', 'Nama pajak', { ph: 'PPN' })}${chk('tax_inclusive', 'Harga jual sudah termasuk pajak')}${chk('allow_negative_stock', 'Izinkan penjualan saat stok kurang dari nol', 'Matikan agar kasir tidak bisa menjual melebihi stok')}${chk('auto_barcode', 'Buat barcode EAN-13 otomatis untuk barang baru tanpa barcode', 'Kode berawalan 20 (khusus internal toko), unik, dan bisa dicetak sebagai label')}${inp('default_due_days', 'Tempo kredit bawaan (hari)')}</div></div>
       <div class="card sect"><h2>Dokumen</h2><p>Dipakai pada invoice, surat jalan, dan permohonan pembayaran (PDF).</p><div class="form-grid">${inp('bank_name', 'Bank')}${inp('bank_account', 'Nomor rekening')}${inp('bank_holder', 'Atas nama', { span: 2 })}${inp('signer_name', 'Nama penandatangan')}${inp('signer_title', 'Jabatan', { ph: 'Pimpinan' })}${inp('doc_note', 'Catatan kaki invoice', { span: 2, area: 2, hint: 'Contoh: Barang yang sudah dibeli tidak dapat dikembalikan.' })}</div></div>
+      <div class="card sect"><h2>Acuan harga jual</h2><p>Saran harga untuk barang baru dan Penjualan Faktur. Berlaku untuk toko ini, sama untuk semua barang.</p><div class="form-grid">
+        ${inp('price_akomodasi', 'Akomodasi (Rp per barang)')}${inp('price_laba', 'Laba (%)', { hint: 'dari harga dasar + akomodasi' })}${inp('price_pph', 'PPH (%)', { hint: 'dari harga offline, untuk harga INAPROC' })}${inp('price_ppn', 'PPN (%)', { hint: 'dari harga offline, untuk harga INAPROC dan faktur' })}
+        <div class="span2 hint" style="line-height:1.6">Harga jual offline (kasir, Penjualan SP/Langsung) = (harga dasar + akomodasi) + laba. Harga INAPROC = harga offline + PPH + PPN (PPN sudah termasuk). Harga di master barang untuk kasir boleh diubah per barang; harga di Penjualan Faktur selalu memakai acuan ini, bukan harga jual di master.</div>
+      </div></div>
       <div class="card sect"><h2>Template dokumen</h2><p>Tampilan invoice, surat jalan, dan SPP untuk toko ini. Setiap template berbentuk tetap; template baru ditambahkan lewat kode (lihat README).</p><div class="form-grid">
         ${inp('doc_template', 'Template', { opts: TPL })}
       </div></div>
@@ -200,6 +221,7 @@
     el.querySelector('[data-p=device]').onclick = () => POS.deviceDialog(A.ST);
     async function save() {
       const o = val(); const n = POS.toNum(o.tax_percent); if (!(n >= 0 && n <= 100)) return toast('Pajak harus 0-100', 'err');
+      for (const k of ['price_akomodasi', 'price_laba', 'price_pph', 'price_ppn']) { o[k] = POS.toNum(o[k]); if (!Number.isFinite(o[k]) || o[k] < 0 || (k !== 'price_akomodasi' && o[k] > 100)) return toast('Acuan harga: isi angka yang benar (persen 0-100)', 'err'); }
       o.tax_percent = n; o.default_due_days = POS.toNum(o.default_due_days) || 14;
       if (!String(o.store_name).trim()) return toast('Nama toko wajib diisi', 'err');
       $('#ssave', el).disabled = true;

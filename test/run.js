@@ -82,8 +82,8 @@ const ok = (name) => { pass++; console.log('  ok  ' + name); };
 
   // ---- penjualan
   let s1 = await K.post('/api/sales', { items: [{ product_id: p1.id, qty: 2 }, { product_id: p2.id, qty: 1, discount: 500 }], method: 'TUNAI', paid: 20000 });
-  assert.equal(s1.code, 201); assert.equal(s1.subtotal, 7000 + 5000); assert.equal(s1.total, 12000); // harga Teh sudah 5500 dari impor, diskon baris 500
-  assert.equal(s1.change_amount, 8000); assert.ok(/^INV-\d{8}-0001$/.test(s1.sale_no)); ok('penjualan tunai + kembalian + nomor');
+  assert.equal(s1.code, 201); assert.equal(s1.subtotal, 7000 + 5500); assert.equal(s1.total, 12500); assert.equal(s1.discount, 0); assert.equal(s1.items[1].discount, 0); // diskon sudah dihapus: field diskon diabaikan
+  assert.equal(s1.change_amount, 7500); assert.ok(/^INV-\d{8}-0001$/.test(s1.sale_no)); ok('penjualan tunai + kembalian + nomor; diskon diabaikan');
   assert.equal((await K.post('/api/sales', { items: [{ product_id: p1.id, qty: 1 }], paid: 100 })).code, 400); ok('uang kurang ditolak');
   const sw = await K.post('/api/sales', { items: [{ product_id: p1.id, qty: 10 }], method: 'QRIS' }); assert.equal(sw.items[0].price, 3000); assert.equal(sw.total, 30000); ok('harga grosir otomatis');
   assert.equal((await K.get('/api/products/' + p1.id)).stock, 50 - 2 - 10); ok('stok berkurang');

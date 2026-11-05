@@ -6,7 +6,7 @@ const { ensureSchema } = require('../src/db/schema');
   await ensureSchema();
   const sid = (await db.one('SELECT id FROM stores ORDER BY id LIMIT 1')).id; // data contoh masuk ke toko pertama
   const cats = {};
-  for (const n of ['Minuman', 'Makanan Ringan', 'Sembako', 'Kebersihan', 'Alat Tulis']) cats[n] = await db.insert('categories', { store_id: sid, name: n });
+  for (const n of ['Minuman', 'Makanan Ringan', 'Sembako', 'Kebersihan', 'Alat Tulis']) cats[n] = await db.insert('categories', { name: n });
   const items = [
     ['Air Mineral 600ml', '8991001000011', 'Minuman', 'btl', 2000, 3500, 24, 3000, 120],
     ['Teh Botol 450ml', '8991001000028', 'Minuman', 'btl', 3500, 5500, 0, 0, 60],
@@ -25,9 +25,11 @@ const { ensureSchema } = require('../src/db/schema');
   for (const [name, barcode, cat, unit, buy, sell, wmin, wprice, qty] of items) {
     n++;
     const id = await db.insert('products', { store_id: sid, sku: 'B' + String(n).padStart(6, '0'), barcode, name, category_id: cats[cat], unit, buy_price: buy, sell_price: sell, wholesale_min: wmin, wholesale_price: wprice, min_stock: 10, stock: 0, active: 1, created_at: db.now() });
+    await db.exec('UPDATE products SET item_id = id WHERE id = ?', [id]);
     await db.tx((t) => stock.move(t, { store_id: sid, product_id: id, qty, type: 'OPENING', note: 'Stok awal', allowNegative: true }));
   }
-  await db.upsert('counters', { k: `${sid}:SKU`, v: n }, ['k']);
+  await db.upsert('counters', { k: 'SKU', v: n }, ['k']);
+  await db.tx((t) => require('../src/services/catalog').fillAllStores(t));
   await db.insert('suppliers', { name: 'PT Sumber Pangan Nusantara', contact: 'Rudi', phone: '021-5550101', address: 'Jl. Industri No. 12, Jakarta', active: 1 });
   await db.insert('customers', { name: 'CV Mitra Sejahtera', phone: '0812-3456-7890', address: 'Jl. Kenanga No. 5, Bandung', active: 1 });
   console.log('Data contoh dimasukkan.');

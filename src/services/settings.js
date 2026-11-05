@@ -27,10 +27,14 @@ const DEFAULTS = {
   signer_name: '',
   signer_title: 'Pimpinan',
   doc_note: '',             // catatan kaki invoice
+  price_akomodasi: '2000',  // Rp per barang (acuan harga jual)
+  price_laba: '15',         // % laba dari (harga dasar + akomodasi)
+  price_pph: '1.5',         // % PPH untuk harga INAPROC
+  price_ppn: '11',          // % PPN untuk harga INAPROC & faktur
   doc_template: 'default',  // nama template (lihat src/templates/index.js)
 };
 const BOOL = ['receipt_show_logo', 'receipt_show_npwp', 'tax_inclusive', 'allow_negative_stock', 'auto_barcode'];
-const NUM = ['tax_percent', 'default_due_days', 'paper_width'];
+const NUM = ['tax_percent', 'default_due_days', 'paper_width', 'price_akomodasi', 'price_laba', 'price_pph', 'price_ppn'];
 
 const cache = new Map(); // storeId -> pengaturan mentah
 async function load(sid) {
@@ -64,6 +68,8 @@ async function save(sid, input) {
     }
     if (k === 'paper_width' && !['58', '80'].includes(v)) v = '80';
     if (k === 'doc_template' && !require('../templates')[v]) throw bad('Template tidak dikenal');
+    if (k === 'price_akomodasi') { const n = Number(v); if (!(n >= 0 && n <= 1e9)) throw bad('Akomodasi harus 0 atau lebih'); }
+    if (['price_laba', 'price_pph', 'price_ppn'].includes(k)) { const n = Number(v); if (!(n >= 0 && n <= 100)) throw bad('Laba, PPH, dan PPN harus 0-100'); }
     if (k === 'tax_percent') { const n = Number(v); if (!(n >= 0 && n <= 100)) throw bad('Pajak harus 0-100'); }
     rows.push([k, v]);
   }

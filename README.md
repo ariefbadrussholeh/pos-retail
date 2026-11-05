@@ -88,12 +88,12 @@ Admin > Laporan & Excel: penjualan harian, rincian transaksi, penjualan per bara
 
 Satu aplikasi dan satu database untuk banyak toko.
 
-- **Terpisah per toko:** barang, kategori, stok, harga, transaksi, pembelian, opname, laporan, dashboard, pengaturan, dan penomoran dokumen.
-- **Milik bersama semua toko:** pelanggan, pemasok (rekanan), dan jenis dokumen (Master Dokumen).
-- **Owner** memilih toko lewat dropdown *Toko aktif* di sidebar (di layar kasir juga ada). Setiap tab browser mengingat tokonya sendiri.
+- **Terpisah per toko:** stok, harga dasar, harga jual POS, transaksi, pembelian, opname, laporan, dashboard, pengaturan (termasuk pengaturan harga), dan penomoran dokumen.
+- **Milik bersama semua toko:** master barang (SKU, barcode, nama, kategori, satuan), kategori, pelanggan, pemasok, dan jenis dokumen. Barang baru otomatis muncul di semua toko (stok 0). SKU dan barcode unik secara global.
+- **Owner** memilih toko lewat dropdown *Toko* di topbar (di layar kasir juga ada). Setiap tab browser mengingat tokonya sendiri.
 - **Kasir** dikunci ke satu toko (diatur di menu Pengguna).
 - Menu **Toko**: tambah toko, ubah nama/kode, nonaktifkan. Saat menambah toko ada opsi *Salin pengaturan dari* toko lain (identitas, pajak, template). Toko tidak dihapus, hanya dinonaktifkan.
-- SKU dan barcode boleh sama di toko berbeda; nomor dokumen (INV, PO, GR, OP) dihitung per toko.
+- Nomor dokumen (INV, PO, GR, OP) dihitung per toko.
 
 ### Upgrade dari versi lama
 
@@ -102,7 +102,24 @@ Migrasi otomatis dan aman diulang; berjalan sendiri saat aplikasi pertama meneri
 - Dari v1.2: data lama menjadi **toko pertama**, kasir lama ditempatkan di toko itu, penomoran dilanjutkan.
 - Dari v1.3: pelanggan dan pemasok kini dipakai bersama. Bila dulu ada pelanggan/pemasok yang sama di dua toko, akan tampil dobel; gabungkan atau nonaktifkan salah satunya. Opsi warna/gambar/format nomor dokumen di Pengaturan dihapus (lihat di bawah); nilai lamanya diabaikan. Tabel Master Dokumen dan dokumen pendukung dibuat otomatis.
 
-## Penjualan INAPROC (di luar POS)
+- Dari v1.4: master barang dan kategori menjadi bersama. Barang ber-SKU sama di beberapa toko digabung jadi satu item (stok dan harga tiap toko tetap), kategori bernama sama digabung, setiap toko diisi semua barang. Penjualan CUSTOM menjadi INAPROC; No. SP digabung ke No. Kontrak/SP. Diskon dihapus dari semua penjualan.
+
+## Acuan harga
+
+Pengaturan per toko di *Identitas & Pengaturan → Acuan harga jual* (berlaku umum untuk semua barang): akomodasi (Rp), laba (%), PPH (%), PPN (%).
+
+- harga offline = (harga dasar + akomodasi) x (1 + laba%)
+- harga INAPROC = harga offline + PPH% x offline + PPN% x offline
+
+Dipakai sebagai saran saat membuat barang (harga jual POS awal = harga offline, tetap bisa diubah, hanya untuk tampilan kasir) dan di Penjualan Faktur. Faktur tidak pernah mengambil harga dari harga jual master. Tombol **Excel E-Katalog** di menu Barang mengekspor rincian harga dasar sampai harga e-katalog (rumus Excel hidup, parameter di baris atas).
+
+Seeder master barang dari Excel: `npm run seed:ecatalog` (89 barang bernama; 11 baris tanpa nama dilewati; satuan awal pcs, stok 0; aman diulang).
+
+## Penjualan Faktur (di luar POS)
+
+Menu **Penjualan Faktur** punya tiga jenis: **INAPROC** (harga acuan sudah termasuk PPN, tidak bisa diganti; harga per baris boleh diubah), **SP** dan **Langsung** (sama persis; harga = harga offline, tidak bisa diubah; total di atas Rp 2.000.000 wajib PPN). Satu kolom **No. Kontrak / SP**. Tanpa diskon.
+
+## Penjualan INAPROC (di luar POS), rincian lama
 
 Menu **Penjualan INAPROC** (owner) untuk faktur ke perusahaan/instansi, tampilan admin biasa:
 
@@ -114,7 +131,7 @@ Menu **Penjualan INAPROC** (owner) untuk faktur ke perusahaan/instansi, tampilan
 
 ### Dokumen pendukung
 
-Di detail Penjualan INAPROC ada bagian **Dokumen**: unggah banyak berkas sekaligus, masing-masing dengan **judul** dan **jenis**. Jenis diambil dari menu **Master Dokumen** (awal: Surat Pesanan, Kontrak/SPK, BAST, Surat Jalan bertanda tangan, Invoice/Kwitansi, Faktur Pajak, Bukti Transfer; bisa ditambah/diubah/dinonaktifkan) atau **Lainnya**. Berkas PDF, gambar, Word, Excel, PowerPoint, atau teks, maksimal 4 MB per berkas (batas request Vercel), 50 berkas per transaksi. Berkas disimpan di database sehingga ikut backup/restore.
+Di detail penjualan faktur ada tombol **Dokumen** (modal terpisah): unggah banyak berkas sekaligus, masing-masing dengan **judul** dan **jenis**. Jenis diambil dari menu **Master Dokumen** (awal: Surat Pesanan, Kontrak/SPK, BAST, Surat Jalan bertanda tangan, Invoice/Kwitansi, Faktur Pajak, Bukti Transfer; bisa ditambah/diubah/dinonaktifkan) atau **Lainnya**. Berkas PDF, gambar, Word, Excel, PowerPoint, atau teks, maksimal 4 MB per berkas (batas request Vercel), 50 berkas per transaksi. Berkas disimpan di database sehingga ikut backup/restore.
 
 ### Format nomor dokumen
 
@@ -165,7 +182,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-144 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan INAPROC (3 mode pajak, piutang, void, dokumen pendukung), pelanggan/pemasok bersama, template dokumen, backup dan restore.
+155 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan INAPROC (3 mode pajak, piutang, void, dokumen pendukung), pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

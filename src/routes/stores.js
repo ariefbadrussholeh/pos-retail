@@ -28,6 +28,7 @@ router.post('/', wrap(async (req, res) => {
   const id = await db.tx(async (t) => {
     if (await t.one('SELECT id FROM stores WHERE code = ?', [code])) throw err(409, 'Kode toko sudah dipakai');
     const sid = await t.insert('stores', { code, name, active: 1, created_at: t.now() });
+    await require('../services/catalog').fillAllStores(t); // toko baru langsung punya semua barang (stok 0)
     if (from) { // salin pengaturan (identitas, pajak, template, gambar) dari toko lain
       for (const r of await t.query('SELECT k, v FROM store_settings WHERE store_id = ?', [from])) await t.upsert('store_settings', { store_id: sid, k: r.k, v: r.v }, ['store_id', 'k']);
     }

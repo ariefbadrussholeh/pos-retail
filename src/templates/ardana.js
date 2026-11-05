@@ -21,9 +21,8 @@ function palette() {
 // Referensi untuk kop kanan: label singkat agar tidak membungkus
 function metaRefs(d) {
   const r = [];
-  if (d.contract_no) r.push(['No. Kontrak', d.contract_no]);
-  if (d.contract_date) r.push(['Tgl. Kontrak', tgl(d.contract_date)]);
-  if (d.po_ref) r.push(['No. SP', d.po_ref]);
+  if (d.contract_no) r.push(['No. Kontrak/SP', d.contract_no]);
+  if (d.contract_date) r.push(['Tgl. Kontrak/SP', tgl(d.contract_date)]);
   return r;
 }
 function img(doc, buf, x, y, o) { if (!buf) return; try { doc.image(buf, x, y, o); } catch (_) { /* gambar rusak diabaikan */ } }
@@ -193,7 +192,7 @@ function paymentRequest(doc, s, d, imgs) {
   row('Alamat', [s.address, s.city].filter(Boolean).join(', ') || '-');
   if (s.bank_account) row(`No. Rekening ${s.bank_name || ''}`.trim(), `${s.bank_account}${s.bank_name ? ' (' + s.bank_name + ')' : ''}`);
   y += 14;
-  const ref = d.po_ref ? `Surat Pesanan ${d.po_ref}` : `transaksi ${d.no}`;
+  const ref = d.contract_no ? `Kontrak/Surat Pesanan ${d.contract_no}` : `transaksi ${d.no}`;
   const para = `Sehubungan dengan pekerjaan dengan ${ref} Tahun Anggaran ${String(d.date).slice(0, 4)}, dengan Nilai Tagihan sebesar : Rp. ${num(owed)} ( ${terbilang(owed).replace(' rupiah', ' rupiah')} )`;
   doc.font('Helvetica').fontSize(9).fillColor(P.ink).text(para, X0 + 2, y, { width: W - 4, lineGap: 2 }); y = doc.y + 24;
   doc.text('Demikian permohonan kami atas perhatian serta kerjasamanya kami ucapkan terimakasih', X0 + 2, y, { width: W - 4 }); y = doc.y + 24;

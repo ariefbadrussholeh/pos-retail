@@ -1,0 +1,536 @@
+[
+ {
+  "name": "KERTAS A4",
+  "buy": 51000,
+  "akomodasi": 2000,
+  "laba": 10.0
+ },
+ {
+  "name": "KERTAS F4",
+  "buy": 55000,
+  "akomodasi": 2000,
+  "laba": 10.0
+ },
+ {
+  "name": "BERAS",
+  "buy": 410000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "FIBER",
+  "buy": 61500,
+  "akomodasi": 2000,
+  "laba": 5.0
+ },
+ {
+  "name": "SUPER SOLL",
+  "buy": 19000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "SUNCO",
+  "buy": 47500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "SEGITIGA BIRU",
+  "buy": 12500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "GULA",
+  "buy": 19000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "garam",
+  "buy": 2000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "BLUEBAND 4.5 KG",
+  "buy": 209000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Bihun jagung Padamu 350gr",
+  "buy": 9000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Kental manis frisian flag 545 gr",
+  "buy": 19000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "UHT Full cream Frisian Flag",
+  "buy": 21000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Minyak Kanola Tropicanaslim",
+  "buy": 82000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Minyak dorang 5 lt",
+  "buy": 280000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Marjan rasa cocopandan",
+  "buy": 22000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Marjan rasa melon",
+  "buy": 22000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Saori Saos tiram 1L",
+  "buy": 49500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Agar-Agar Swallow Globe",
+  "buy": 5000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Tepung roti mama suka 100gr",
+  "buy": 11000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Keju prohiz gold 160gr",
+  "buy": 14000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Coklat bubuk van houten",
+  "buy": 49000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sabun Larrist",
+  "buy": 9000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Mama lemon 950 ml",
+  "buy": 13500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik idola 15",
+  "buy": 8000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik laundry",
+  "buy": 48000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "hand glove",
+  "buy": 11000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "gabin",
+  "buy": 11500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "delmonte",
+  "buy": 19000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik OPP uk. 12x12",
+  "buy": 5000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Tepung Tapioka Gunung",
+  "buy": 9000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Tepung beras 500gr",
+  "buy": 10500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "tepung cakra",
+  "buy": 13000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "kurvet",
+  "buy": 16000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Postex 1 L",
+  "buy": 23000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "cup hok",
+  "buy": 12000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "smart 725",
+  "buy": 24000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "polkadot",
+  "buy": 13500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "sealer cup",
+  "buy": 95000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "cup Puding 150 ml",
+  "buy": 14000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik 250 gr buram",
+  "buy": 2500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "kecap sedap 620ml botol",
+  "buy": 32000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "garpu",
+  "buy": 8000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik 1kg buram",
+  "buy": 5000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik 250 gr bening",
+  "buy": 2000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik 1 kg bening",
+  "buy": 5000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik klip 16x25",
+  "buy": 29000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Karet gelang",
+  "buy": 3500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sabun Zwitsal 400 ml",
+  "buy": 26000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik 1/2 kg bening",
+  "buy": 4000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik 1/2 kg buram",
+  "buy": 4500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Garam Lasosa",
+  "buy": 23000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "stik",
+  "buy": 6000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "spon",
+  "buy": 5000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "sapu",
+  "buy": 35000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "sedotan",
+  "buy": 18000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "amplop",
+  "buy": 20000,
+  "akomodasi": 2000,
+  "laba": 10.0
+ },
+ {
+  "name": "wrapping",
+  "buy": 312000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik segitiga",
+  "buy": 12000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "lososa",
+  "buy": 50000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sendok teh luxor",
+  "buy": 10000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "cup kue",
+  "buy": 21000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "thinwal 300",
+  "buy": 20000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "thinwal 450",
+  "buy": 25000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "meses holland",
+  "buy": 18000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Serok sampah",
+  "buy": 17000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik Roll",
+  "buy": 40000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "stella",
+  "buy": 12000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "dahlia",
+  "buy": 42000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Platik sampah 40x60 kuning",
+  "buy": 25000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik kresek 40x65 hitam",
+  "buy": 28000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik sampah hitam uk 90x120 cm",
+  "buy": 20000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "karbol",
+  "buy": 23000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Stik Es krim",
+  "buy": 7000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "susu diabetasil 170gr",
+  "buy": 54000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "kemoceng microfiber",
+  "buy": 35000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sikat Kamar mandi panjang",
+  "buy": 27000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sapu Lidi",
+  "buy": 18000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Sedotan steril isi 500pcs",
+  "buy": 28000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Karet gelang mentah",
+  "buy": 35000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Plastik bening klin",
+  "buy": 13000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "plastik saola",
+  "buy": 13000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "kemoceng wool",
+  "buy": 22000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Scop wc",
+  "buy": 45000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "Luxor sendok makan bening",
+  "buy": 18000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "gunting rumput",
+  "buy": 120000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "lap microfiber",
+  "buy": 13500,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "kanebo",
+  "buy": 17000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ },
+ {
+  "name": "cling",
+  "buy": 10000,
+  "akomodasi": 2000,
+  "laba": 15.0
+ }
+]

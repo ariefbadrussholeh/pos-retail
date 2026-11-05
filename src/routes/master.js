@@ -52,7 +52,7 @@ function crud(table, fields, o = {}) {
   return r;
 }
 const { role } = require('../middleware/auth');
-const categories = crud('categories', ['name'], { required: ['name'] });
+const categories = crud('categories', ['name'], { required: ['name'], shared: true });
 // Pelanggan, pemasok, dan jenis dokumen milik bersama semua toko; barang & kategori per toko.
 const suppliers = crud('suppliers', ['name', 'contact', 'phone', 'email', 'address', 'npwp', 'note', 'active'], { required: ['name'], search: ['name', 'phone', 'contact'], hasActive: true, shared: true });
 const customers = crud('customers', ['name', 'phone', 'email', 'address', 'spp_to', 'npwp', 'note', 'active'], { required: ['name'], search: ['name', 'phone'], hasActive: true, shared: true, createRole: role('owner', 'kasir') });

@@ -33,11 +33,10 @@ function taxLabel(s, d) {
   const incl = d.tax_mode ? d.tax_mode === 'INCLUDE' : s.tax_inclusive;
   return `${s.tax_label || 'PPN'}${rate ? ' ' + rate + '%' : ''}${incl ? ' (termasuk)' : ''}`;
 }
-// Baris referensi tambahan (kontrak, surat pesanan) bila ada
+// Baris referensi tambahan (No. Kontrak / SP) bila ada
 function refRows(d) {
   const r = [];
-  if (d.contract_no) r.push(['No. Kontrak', d.contract_no + (d.contract_date ? ' / ' + tgl(d.contract_date) : '')]);
-  if (d.po_ref) r.push(['No. Surat Pesanan', d.po_ref]);
+  if (d.contract_no) r.push(['No. Kontrak / SP', d.contract_no + (d.contract_date ? ' / ' + tgl(d.contract_date) : '')]);
   return r;
 }
 module.exports = { F, BULAN, rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows };
