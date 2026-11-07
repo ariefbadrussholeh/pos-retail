@@ -198,7 +198,7 @@
         ${A.table([
           { h: 'Judul', f: (d) => `<a href="${POS.su(`${base}/${d.id}/file`)}" target="_blank" rel="noopener">${esc(d.title)}</a><div class="muted" style="font-size:12px">${esc(d.file_name)} &middot; ${fsize(d.size)}</div>` },
           { h: 'Jenis', f: (d) => esc(d.type_name || 'Lainnya') }, { h: 'Diunggah', f: (d) => POS.dt(d.created_at) },
-          { h: '', cls: 'r', f: (d) => `<button class="sm" data-dedit="${d.id}">Ubah judul</button> <button class="sm danger" data-ddel="${d.id}">Hapus</button>` },
+          { h: '', cls: 'r', f: (d) => `<button class="sm ic" data-dedit="${d.id}" title="Ubah judul" aria-label="Ubah judul">${A.ICON.edit}</button> <button class="sm danger ic" data-ddel="${d.id}" title="Hapus" aria-label="Hapus">${A.ICON.del}</button>` },
         ], docs, { empty: 'Belum ada dokumen' })}
         <div style="margin-top:10px"><label class="f">Tambah dokumen (boleh pilih banyak berkas)</label>
           <input type="file" id="sd_file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" style="width:auto"><div class="hint">PDF, gambar, Word, Excel, PowerPoint, atau teks. Maksimal 4 MB per berkas.</div></div>

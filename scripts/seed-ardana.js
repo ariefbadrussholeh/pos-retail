@@ -3,11 +3,13 @@
 const db = require('../src/db');
 const { ensureSchema } = require('../src/db/schema');
 const settings = require('../src/services/settings');
+const catalog = require('../src/services/catalog');
 
 (async () => {
   await ensureSchema();
   let st = await db.one("SELECT id FROM stores WHERE code = 'AJS'");
   if (!st) st = { id: await db.insert('stores', { code: 'AJS', name: 'CV Ardana Jaya Sejahtera', active: 1, created_at: db.now() }) };
+  await db.tx((t) => catalog.fillAllStores(t)); // toko baru langsung punya semua barang master (stok 0)
   await settings.save(st.id, {
     store_name: 'CV Ardana Jaya Sejahtera',
     address: 'Ds. Grujugan, Kec. Larangan, Pamekasan',
@@ -17,6 +19,6 @@ const settings = require('../src/services/settings');
     tax_percent: '0', default_due_days: '50',
     doc_template: 'ardana',
   });
-  console.log(`Toko Ardana siap (id ${st.id}). Pilih lewat dropdown toko di pojok kiri atas panel admin.`);
+  console.log(`Toko Ardana siap (id ${st.id}). Pilih lewat dropdown toko di topbar panel admin.`);
   await db.close();
 })().catch((e) => { console.error(e); process.exit(1); });

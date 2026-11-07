@@ -90,7 +90,20 @@
     if (!rows.length) return `<div class="empty">${esc(empty)}</div>`;
     return `<table class="t"><thead><tr>${cols.map((c) => `<th class="${c.cls || ''}">${esc(c.h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}">${cols.map((c) => `<td class="${c.cls || ''}">${c.f(r, i)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   };
-  A.btn = (act, label, cls = 'sm', extra = '') => `<button class="${cls}" data-act="${act}" ${extra}>${label}</button>`;
+  // Tombol aksi di tabel: ikon saja (teks jadi tooltip + aria-label). Aksi tanpa ikon tetap berupa teks.
+  const ic = (d) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  A.ICON = {
+    view: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    edit: ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+    del: ic('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
+    docs: ic('<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>'),
+    label: ic('<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/>'),
+    card: ic('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>'),
+    open: ic('<path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  };
+  A.btn = (act, label, cls = 'sm', extra = '') => (A.ICON[act]
+    ? `<button class="${cls} ic" data-act="${act}" title="${esc(label)}" aria-label="${esc(label)}" ${extra}>${A.ICON[act]}</button>`
+    : `<button class="${cls}" data-act="${act}" ${extra}>${label}</button>`);
 
   // cfg: {title, sub, actions, filters:[{name,label,type,options}], url(st), cols, onAct(act,row,reload), limit, empty}
   A.list = async function (el, cfg) {

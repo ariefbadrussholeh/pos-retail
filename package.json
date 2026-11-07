@@ -1,6 +1,6 @@
 {
   "name": "pos-retail",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "description": "POS toko retail: Express.js + Supabase (Postgres)",
   "main": "src/server.js",
@@ -8,8 +8,11 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/init-db.js",
+    "db:refresh": "node scripts/db-refresh.js",
     "db:seed": "node scripts/seed.js",
     "seed:ardana": "node scripts/seed-ardana.js",
+    "seed:rizky": "node scripts/seed-rizky.js",
     "seed:ecatalog": "node scripts/seed-ecatalog.js",
     "test": "node test/run.js"
   },

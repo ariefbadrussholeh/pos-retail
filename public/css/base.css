@@ -33,6 +33,9 @@ button.ghost { border-color: transparent; background: transparent; }
 button.ghost:hover { background: var(--hover); }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 button.sm { padding: 3px 8px; font-size: 12.5px; }
+button.ic { display: inline-flex; align-items: center; justify-content: center; padding: 5px 7px; line-height: 0; }
+button.ic svg { display: block; }
+td .ic + .ic { margin-left: 4px; }
 
 input, select, textarea { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px 9px; width: 100%; min-width: 0; }
 input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; border-color: var(--focus); }
@@ -80,5 +83,6 @@ dialog.wide { max-width: min(96vw, 900px); }
 #topbar { position: fixed; top: 0; left: 0; height: 3px; width: 100%; z-index: 10000; pointer-events: none; opacity: 0; transition: opacity .25s; }
 #topbar i { display: block; height: 100%; width: 0; background: var(--ink); box-shadow: 0 0 6px var(--ink); transition: width .25s ease-out; }
 #topbar.on { opacity: 1; }
-button.theme { padding: 3px 8px; font-size: 12.5px; }
+button.theme { padding: 5px 7px; }
 @media (prefers-reduced-motion: reduce) { #topbar i { transition: none; } }
+td.r:has(> button.ic) { white-space: nowrap; }

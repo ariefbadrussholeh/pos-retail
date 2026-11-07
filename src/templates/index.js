@@ -8,5 +8,6 @@
 module.exports = {
   default: require('./default'),
   ardana: require('./ardana'),
+  rizky: require('./rizky'),
   // contoh: tokoabc: require('./tokoabc'),
 };

@@ -9,7 +9,8 @@ Fitur: multi toko, penjualan INAPROC (faktur ke instansi + dokumen pendukung), b
 ```bash
 npm install
 cp .env.example .env     # isi DATABASE_URL dan JWT_SECRET
-npm run db:init          # buat tabel + akun owner awal
+npm run db:init          # buat tabel + akun owner awal (juga migrasi; alias: npm run db:migrate)
+npm run db:refresh       # HAPUS semua tabel aplikasi lalu buat ulang (lihat bagian Refresh database)
 npm run db:seed          # (opsional) data contoh
 npm start                # http://localhost:3000
 ```
@@ -149,6 +150,19 @@ Tombol **Dokumen** ada di baris daftar Penjualan Faktur (modal terpisah, tanpa m
 
 Sama untuk semua toko: `{n} / {rom} / {code} / {yyyy}`, contoh `03 / X / AJS / 2026` (urut per toko, mulai 1 lagi tiap tahun). Nomor bisa juga diisi manual. **Untuk mengubah format**, edit konstanta `FORMAT` di `src/services/doc-number.js` (token: `{n}` `{n3}` `{rom}` `{mm}` `{code}` `{yyyy}` `{yy}`).
 
+## Refresh database
+
+`npm run db:refresh` = migrasi ulang dari nol (seperti `migrate:refresh`): menghapus **semua tabel aplikasi** (bukan seluruh database), membuat ulang, dan membuat akun owner awal. **Semua data hilang**, jadi backup dulu. Meminta konfirmasi (ketik `REFRESH`); untuk skrip pakai `--yes`.
+
+```bash
+npm run db:refresh                                  # tabel kosong + akun owner
+npm run db:refresh -- --seed                        # + data contoh
+npm run db:refresh -- --ecatalog --ardana --rizky   # + master barang e-katalog, toko Ardana, toko Rizky Nabila
+npm run db:refresh -- --yes --ecatalog              # tanpa konfirmasi
+```
+
+Opsi seeder: `--seed`, `--ecatalog`, `--ardana`, `--rizky` (urutan jalan sama dengan daftar ini). Untuk sekadar menjalankan migrasi tanpa menghapus data, pakai `npm run db:migrate` (atau `db:init`).
+
 ## Template dokumen
 
 Pengaturan > **Template dokumen** hanya memilih template untuk toko tersebut (invoice, surat jalan, SPP):
@@ -157,6 +171,7 @@ Pengaturan > **Template dokumen** hanya memilih template untuk toko tersebut (in
 |---|---|
 | **Bawaan** | Invoice layout *Nota Penjualan*, surat jalan, dan permohonan pembayaran standar. Memakai logo dari Pengaturan toko. |
 | **Ardana** | Khusus CV Ardana Jaya Sejahtera: logo, ornamen, footer penuh, ucapan terima kasih. Tampilan tetap. |
+| **Rizky Nabila (hijau stabilo)** | Khusus Toko Rizky Nabila: kop logo RN, tabel berheader hijau stabilo (#90FA26) dengan baris kosong, kotak catatan merah, Tanda Terima / Hormat Kami. Invoice mengikuti form Excel toko; Surat Jalan dan SPP didesain dengan palet yang sama. |
 
 Template berbentuk tetap (tanpa pilihan warna/logo), tetapi nama toko, alamat, telepon, rekening, dan penandatangan tetap diambil dari Pengaturan toko.
 
@@ -166,6 +181,8 @@ Template berbentuk tetap (tanpa pilihan warna/logo), tetapi nama toko, alamat, t
 - `ardana.js` template Ardana, dengan gambar di `src/templates/ardana/` (logo, header, footer, ikon telepon). Warna dan teks ucapan ada di konstanta paling atas file ini.
 
 **Menambah template baru** (mis. untuk toko lain): salin `src/templates/ardana.js` menjadi `src/templates/tokoabc.js`, ubah layout/warna/gambarnya (gambar di folder `src/templates/tokoabc/`), tambahkan satu baris `tokoabc: require('./tokoabc'),` di `src/templates/index.js`, lalu pilih di Pengaturan > Template dokumen toko tersebut. Setiap template mengekspor `{ label, margin, draw(doc, kind, s, d) }`; `kind` = `invoice` | `delivery` | `payment-request`, `s` = pengaturan toko, `d` = data dokumen.
+
+**Toko Rizky Nabila:** `npm run seed:rizky` membuat toko kode `RN` (nomor dokumen `n / bulan / RN / tahun`), alamat, dan template Rizky. Telepon, rekening, dan nama penandatangan diisi sendiri di Pengaturan.
 
 **Toko CV Ardana Jaya Sejahtera:** jalankan `npm run seed:ardana` (membuat toko kode `AJS`, identitas, rekening, penandatangan, dan template Ardana). Pilih toko itu di dropdown, lalu tambahkan barang. Untuk toko lain tidak perlu apa-apa: tetap memakai template Bawaan, atau pilih Ardana di Pengaturan bila ingin tampilan yang sama.
 
@@ -194,7 +211,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-174 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
+175 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

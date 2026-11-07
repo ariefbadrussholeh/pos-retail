@@ -169,7 +169,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await A.del(`/api/invoices/${i1.id}/docs/${d3j.id}`)).ok, true); assert.equal((await A.get(`/api/invoices/${i1.id}/docs`)).rows.length, 2); ok('hapus dokumen');
 
   // ---- template dokumen
-  for (const tpl of ['default', 'ardana']) {
+  for (const tpl of ['default', 'ardana', 'rizky']) {
     assert.equal((await A.put('/api/settings', { doc_template: tpl, address: 'Ds. Grujugan, Pamekasan', phone: '081996875314', bank_name: 'Bank Jatim', bank_account: '1683831065', signer_name: 'ERSAD', signer_title: 'Direktur' })).doc_template, tpl);
     for (const kind of ['invoice', 'delivery', 'payment-request']) {
       const r = await A.get(`/api/docs/${kind}/sale/${i1.id}`, true); assert.equal(r.status, 200, `${tpl}/${kind}`);
@@ -178,7 +178,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
     ok(`3 PDF custom dengan template ${tpl}`);
   }
   assert.equal((await A.put('/api/settings', { doc_template: 'xxx' })).code, 400); ok('template tidak dikenal ditolak');
-  const tl = await A.get('/api/settings/templates'); assert.deepEqual(tl.map((t) => t.id), ['default', 'ardana']); ok('daftar template berasal dari src/templates');
+  const tl = await A.get('/api/settings/templates'); assert.deepEqual(tl.map((t) => t.id), ['default', 'ardana', 'rizky']); ok('daftar template berasal dari src/templates');
   const rm = await A.put('/api/settings', { doc_accent: '#000000', doc_no_format: 'x', tpl_header: 'x', doc_template: 'ardana' }); assert.equal(rm.doc_accent, undefined); assert.equal(rm.tpl_header, undefined); ok('opsi warna/gambar/format nomor sudah dihapus');
   const cuS = await A.put('/api/customers/' + cu.id, { spp_to: 'Kepala UPT Puskesmas Talang\nJl. Raya Sumenep No. 1' }); assert.equal(cuS.spp_to, 'Kepala UPT Puskesmas Talang\nJl. Raya Sumenep No. 1'); ok('alamat tujuan SPP di master pelanggan');
   try {
