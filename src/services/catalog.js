@@ -1,8 +1,8 @@
 // Katalog barang bersama: satu barang (item_id) punya satu baris di tiap toko (stok, harga dasar, harga jual per toko).
 // Data bersama (SKU, barcode, nama, kategori, satuan, aktif) disamakan di semua baris item yang sama.
 const SHARED = ['sku', 'barcode', 'name', 'category_id', 'unit', 'active'];
-const PER_STORE = ['buy_price', 'sell_price', 'wholesale_price', 'wholesale_min', 'min_stock'];
-const COPY = [...SHARED, 'buy_price', 'sell_price', 'wholesale_price', 'wholesale_min', 'created_at'];
+const PER_STORE = ['buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price', 'wholesale_min', 'min_stock'];
+const COPY = [...SHARED, 'buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price', 'wholesale_min', 'created_at'];
 
 // Lengkapi: setiap toko punya baris untuk setiap barang (stok 0, harga disalin dari baris pertama).
 async function fillAllStores(t) {

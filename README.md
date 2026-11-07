@@ -102,36 +102,48 @@ Migrasi otomatis dan aman diulang; berjalan sendiri saat aplikasi pertama meneri
 - Dari v1.2: data lama menjadi **toko pertama**, kasir lama ditempatkan di toko itu, penomoran dilanjutkan.
 - Dari v1.3: pelanggan dan pemasok kini dipakai bersama. Bila dulu ada pelanggan/pemasok yang sama di dua toko, akan tampil dobel; gabungkan atau nonaktifkan salah satunya. Opsi warna/gambar/format nomor dokumen di Pengaturan dihapus (lihat di bawah); nilai lamanya diabaikan. Tabel Master Dokumen dan dokumen pendukung dibuat otomatis.
 
+- Dari v1.5: harga e-katalog, SP, dan langsung tiap barang diisi sekali dari acuan harga lama (agar harga yang berlaku tidak berubah), lalu menjadi isian manual; pengaturan akomodasi/laba/PPH/PPN dihapus. Kolom PPH ditambahkan ke penjualan.
 - Dari v1.4: master barang dan kategori menjadi bersama. Barang ber-SKU sama di beberapa toko digabung jadi satu item (stok dan harga tiap toko tetap), kategori bernama sama digabung, setiap toko diisi semua barang. Penjualan CUSTOM menjadi INAPROC; No. SP digabung ke No. Kontrak/SP. Diskon dihapus dari semua penjualan.
 
-## Acuan harga
+## Harga barang (manual)
 
-Pengaturan per toko di *Identitas & Pengaturan → Acuan harga jual* (berlaku umum untuk semua barang): akomodasi (Rp), laba (%), PPH (%), PPN (%).
+Sejak v1.6 tidak ada perhitungan harga otomatis (akomodasi, laba, PPH, PPN di Pengaturan dihapus). Setiap barang menyimpan harga yang diisi manual, **per toko**:
 
-- harga offline = (harga dasar + akomodasi) x (1 + laba%)
-- harga INAPROC = harga offline + PPH% x offline + PPN% x offline
+- **Harga dasar**: harga kulakan / modal; dasar perhitungan laba.
+- **Harga jual POS**: hanya untuk tampil di layar kasir.
+- **Harga E-Katalog**, **Harga SP**, **Harga Langsung**: dipakai di Penjualan Faktur (tidak pernah memakai harga jual POS).
 
-Dipakai sebagai saran saat membuat barang (harga jual POS awal = harga offline, tetap bisa diubah, hanya untuk tampilan kasir) dan di Penjualan Faktur. Faktur tidak pernah mengambil harga dari harga jual master. Tombol **Excel E-Katalog** di menu Barang mengekspor rincian harga dasar sampai harga e-katalog (rumus Excel hidup, parameter di baris atas).
+Tombol **Excel Harga** di menu Barang mengekspor daftar harga dasar, e-katalog, SP, dan langsung apa adanya. Impor CSV menerima kolom `harga_ekatalog`, `harga_sp`, `harga_langsung`.
 
-Seeder master barang dari Excel: `npm run seed:ecatalog` (89 barang bernama; 11 baris tanpa nama dilewati; satuan awal pcs, stok 0; aman diulang).
+Seeder master barang dari Excel: `npm run seed:ecatalog` (89 barang bernama; 11 baris tanpa nama dilewati; satuan awal pcs, stok 0; aman diulang). Harga dihitung sekali oleh seeder lalu disimpan sebagai angka biasa: harga offline = (dasar + akomodasi) + laba per barang menjadi Harga Jual POS, Harga SP, dan Harga Langsung; Harga E-Katalog = harga offline + PPH 1,5% + PPN 11%. Setelah itu semuanya bisa diubah manual.
 
 ## Penjualan Faktur (di luar POS)
 
-Menu **Penjualan Faktur** punya tiga jenis: **INAPROC** (harga acuan sudah termasuk PPN, tidak bisa diganti; harga per baris boleh diubah), **SP** dan **Langsung** (sama persis; harga = harga offline, tidak bisa diubah; total di atas Rp 2.000.000 wajib PPN). Satu kolom **No. Kontrak / SP**. Tanpa diskon.
+Tiga jenis, hanya memengaruhi harga:
 
-## Penjualan INAPROC (di luar POS), rincian lama
+- **INAPROC**: harga awal = Harga E-Katalog barang; boleh diubah per baris (nama dan satuan juga).
+- **SP**: harga = Harga SP barang, tidak bisa diedit.
+- **Langsung**: harga = Harga Langsung barang, tidak bisa diedit.
 
-Menu **Penjualan INAPROC** (owner) untuk faktur ke perusahaan/instansi, tampilan admin biasa:
+**Pajak bebas untuk semua jenis**: PPN dan PPH masing-masing dipilih *Tanpa*, *Ditambahkan ke harga*, atau *Sudah termasuk harga*, dengan tarif yang bisa diubah (bawaan 11% dan 1,5%). Keduanya dihitung dari harga sebelum pajak (DPP); bila ada yang "sudah termasuk", DPP = subtotal / (1 + jumlah tarif yang termasuk). Tidak ada batas Rp 2.000.000 dan tidak ada diskon. Satu kolom **No. Kontrak / SP**.
 
-- Pelanggan (perusahaan), **no. kontrak**, **tanggal kontrak**, **no. surat pesanan (SP)**, tanggal dokumen, jatuh tempo.
-- **Pajak per transaksi**: tanpa pajak / belum termasuk (ditambahkan) / sudah termasuk, tarif bawaan 11% bisa diubah di form.
-- **Harga, nama barang, dan satuan** per baris diatur sendiri dan tidak mengubah master barang.
-- Stok tetap berkurang (kartu stok tercatat), masuk laporan penjualan, dashboard, dan **piutang** (yang belum dibayar). Cicilan dan pembatalan memakai menu Penjualan yang sama.
-- Dari detail transaksi bisa cetak **Invoice, Surat Jalan, dan SPP**. Alamat tujuan SPP (*Kepada Yth.*) diambil dari master **Pelanggan** (kolom "Alamat tujuan SPP"); kalau kosong otomatis "Kepala [nama pelanggan] + alamat".
+Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (modal unggah), **Ubah**, dan **Hapus** (owner):
+
+- **Ubah**: jenis, pelanggan, tanggal, nomor, kontrak/SP, pajak, dan barang. Stok disesuaikan sebesar selisih (tercatat "Ubah jual" di kartu stok). Pembayaran yang sudah masuk tetap; total baru tidak boleh di bawah jumlah yang sudah dibayar. Baris lama tetap memakai harga dasar dan (untuk SP/Langsung) harga yang tercatat saat itu; baris baru memakai harga sekarang. Bila jenis diganti, semua harga mengikuti jenis baru. Transaksi yang sudah dibatalkan tidak bisa diubah.
+- **Hapus**: permanen. Stok dikembalikan (bila belum dibatalkan), pembayaran dan dokumen pendukung ikut terhapus. Nomor dokumen tidak dipakai ulang.
+
+## Laporan: PPN, PPH, HPP, laba
+
+Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
+
+### Stok, piutang, dan cetak
+
+- Stok berkurang (kartu stok tercatat), transaksi masuk laporan penjualan, dashboard, dan **piutang** (yang belum dibayar). Cicilan dan pembatalan memakai menu Penjualan yang sama.
+- Dari detail transaksi bisa cetak **Invoice, Surat Jalan, dan SPP** (PPN dan PPH tampil di ringkasan bila ada). Alamat tujuan SPP (*Kepada Yth.*) diambil dari master **Pelanggan** (kolom "Alamat tujuan SPP"); kalau kosong otomatis "Kepala [nama pelanggan] + alamat".
 
 ### Dokumen pendukung
 
-Di detail penjualan faktur ada tombol **Dokumen** (modal terpisah): unggah banyak berkas sekaligus, masing-masing dengan **judul** dan **jenis**. Jenis diambil dari menu **Master Dokumen** (awal: Surat Pesanan, Kontrak/SPK, BAST, Surat Jalan bertanda tangan, Invoice/Kwitansi, Faktur Pajak, Bukti Transfer; bisa ditambah/diubah/dinonaktifkan) atau **Lainnya**. Berkas PDF, gambar, Word, Excel, PowerPoint, atau teks, maksimal 4 MB per berkas (batas request Vercel), 50 berkas per transaksi. Berkas disimpan di database sehingga ikut backup/restore.
+Tombol **Dokumen** ada di baris daftar Penjualan Faktur (modal terpisah, tanpa membuka detail): unggah banyak berkas sekaligus, masing-masing dengan **judul** dan **jenis**. Jenis diambil dari menu **Master Dokumen** (awal: Surat Pesanan, Kontrak/SPK, BAST, Surat Jalan bertanda tangan, Invoice/Kwitansi, Faktur Pajak, Bukti Transfer; bisa ditambah/diubah/dinonaktifkan) atau **Lainnya**. Berkas PDF, gambar, Word, Excel, PowerPoint, atau teks, maksimal 4 MB per berkas (batas request Vercel), 50 berkas per transaksi. Berkas disimpan di database sehingga ikut backup/restore.
 
 ### Format nomor dokumen
 
@@ -182,7 +194,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-155 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan INAPROC (3 mode pajak, piutang, void, dokumen pendukung), pelanggan/pemasok bersama, template dokumen, backup dan restore.
+174 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

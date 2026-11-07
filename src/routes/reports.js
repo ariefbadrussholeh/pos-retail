@@ -13,26 +13,34 @@ const DONE = "s.store_id = ? AND s.status = 'DONE'"; // param pertama selalu id 
 const REPORTS = {
   sales_daily: {
     title: 'Penjualan Harian', ranged: true,
-    cols: [C('date', 'Tanggal', 'date'), C('trx', 'Transaksi', 'int', true), C('subtotal', 'Subtotal', 'money', true), C('discount', 'Diskon', 'money', true), C('tax', 'Pajak', 'money', true), C('total', 'Total', 'money', true), C('profit', 'Laba Kotor', 'money', true)],
+    cols: [C('date', 'Tanggal', 'date'), C('trx', 'Transaksi', 'int', true), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
     async run(q, r, sid) {
-      const rows = await db.query(`SELECT DATE(s.created_at) AS date, COUNT(*) AS trx, SUM(s.subtotal) AS subtotal, SUM(s.discount) AS discount, SUM(s.tax) AS tax, SUM(s.total) AS total
+      const rows = await db.query(`SELECT DATE(s.created_at) AS date, COUNT(*) AS trx, SUM(s.subtotal) AS subtotal, SUM(s.tax) AS tax, SUM(s.pph) AS pph, SUM(s.total) AS total, SUM(s.total - s.tax - s.pph) AS dpp
         FROM sales s WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at) ORDER BY DATE(s.created_at)`, [sid, r.f, r.t]);
-      const m = await db.query(`SELECT DATE(s.created_at) AS date, SUM(i.total - i.cost * i.qty) AS margin FROM sale_items i JOIN sales s ON s.id = i.sale_id
+      const m = await db.query(`SELECT DATE(s.created_at) AS date, SUM(i.cost * i.qty) AS hpp FROM sale_items i JOIN sales s ON s.id = i.sale_id
         WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at)`, [sid, r.f, r.t]);
-      const mm = new Map(m.map((x) => [x.date, x.margin]));
-      return rows.map((x) => ({ ...x, profit: round2((mm.get(x.date) || 0) - x.discount) }));
+      const mm = new Map(m.map((x) => [x.date, x.hpp]));
+      return rows.map((x) => { const hpp = mm.get(x.date) || 0; return { ...x, hpp: round2(hpp), profit: round2(x.dpp - hpp) }; });
     },
   },
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
-    cols: [C('sale_no', 'No. Transaksi'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('discount', 'Diskon', 'money', true), C('tax', 'Pajak', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true)],
-    run: (q, r, sid) => db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.method, s.status, s.subtotal, s.discount, s.tax, s.total, s.paid
-      FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.id`, [sid, r.f, r.t]),
+    cols: [C('sale_no', 'No. Transaksi'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
+    async run(q, r, sid) {
+      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
+        (SELECT COALESCE(SUM(i.cost * i.qty), 0) FROM sale_items i WHERE i.sale_id = s.id) AS hpp
+        FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.id`, [sid, r.f, r.t]);
+      return rows.map((x) => (x.status === 'VOID'
+        ? { ...x, subtotal: 0, tax: 0, pph: 0, total: 0, paid: 0, hpp: 0, profit: 0 }
+        : { ...x, hpp: round2(x.hpp), profit: round2(x.total - x.tax - x.pph - x.hpp) }));
+    },
   },
   sales_items: {
     title: 'Penjualan per Barang', ranged: true,
-    cols: [C('sku', 'SKU'), C('name', 'Nama Barang'), C('unit', 'Satuan'), C('qty', 'Qty', 'qty', true), C('revenue', 'Penjualan', 'money', true), C('cost', 'HPP', 'money', true), C('profit', 'Laba Kotor', 'money', true)],
-    run: (q, r, sid) => db.query(`SELECT i.sku, i.name, i.unit, SUM(i.qty) AS qty, SUM(i.total) AS revenue, SUM(i.cost * i.qty) AS cost, SUM(i.total - i.cost * i.qty) AS profit
+    cols: [C('sku', 'SKU'), C('name', 'Nama Barang'), C('unit', 'Satuan'), C('qty', 'Qty', 'qty', true), C('revenue', 'Penjualan (sebelum pajak)', 'money', true), C('cost', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    run: (q, r, sid) => db.query(`SELECT i.sku, i.name, i.unit, SUM(i.qty) AS qty, SUM(i.total * CASE WHEN s.subtotal > 0 THEN (s.total - s.tax - s.pph) / s.subtotal ELSE 1 END) AS revenue, SUM(i.cost * i.qty) AS cost,
+      SUM(i.total * CASE WHEN s.subtotal > 0 THEN (s.total - s.tax - s.pph) / s.subtotal ELSE 1 END - i.cost * i.qty) AS profit
       FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ?
       GROUP BY i.product_id, i.sku, i.name, i.unit ORDER BY SUM(i.total) DESC`, [sid, r.f, r.t]),
   },
@@ -138,8 +146,8 @@ dash.get('/', wrap(async (req, res) => {
   const sid = req.sid;
   const sumDay = (a, b) => db.one(`SELECT COUNT(*) AS trx, COALESCE(SUM(total), 0) AS total FROM sales WHERE store_id = ? AND status = 'DONE' AND created_at >= ? AND created_at < ?`, [sid, a, b]);
   const [now, yest] = await Promise.all([sumDay(t0, t1), sumDay(d(-1) + ' 00:00:00', t0)]);
-  const margin = await db.one(`SELECT COALESCE(SUM(i.total - i.cost * i.qty), 0) AS m FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.store_id = ? AND s.status = 'DONE' AND s.created_at >= ? AND s.created_at < ?`, [sid, t0, t1]);
-  const disc = await db.one(`SELECT COALESCE(SUM(discount), 0) AS d FROM sales WHERE store_id = ? AND status = 'DONE' AND created_at >= ? AND created_at < ?`, [sid, t0, t1]);
+  const net = await db.one(`SELECT COALESCE(SUM(total - tax - pph), 0) AS n FROM sales WHERE store_id = ? AND status = 'DONE' AND created_at >= ? AND created_at < ?`, [sid, t0, t1]);
+  const hpp = await db.one(`SELECT COALESCE(SUM(i.cost * i.qty), 0) AS c FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.store_id = ? AND s.status = 'DONE' AND s.created_at >= ? AND s.created_at < ?`, [sid, t0, t1]);
   const series = await db.query(`SELECT DATE(created_at) AS date, SUM(total) AS total FROM sales WHERE store_id = ? AND status = 'DONE' AND created_at >= ? AND created_at < ? GROUP BY DATE(created_at)`, [sid, d6 + ' 00:00:00', t1]);
   const sm = new Map(series.map((x) => [x.date, x.total]));
   const days = []; for (let i = 6; i >= 0; i--) { const k = d(-i); days.push({ date: k, total: sm.get(k) || 0 }); }
@@ -152,7 +160,7 @@ dash.get('/', wrap(async (req, res) => {
   const open = await db.one("SELECT COUNT(*) AS n FROM purchases WHERE store_id = ? AND status IN ('OPEN','PARTIAL')", [sid]);
   const recent = await db.query(`SELECT s.id, s.sale_no, s.created_at, s.total, s.method, s.status, u.name AS cashier FROM sales s JOIN users u ON u.id = s.user_id WHERE s.store_id = ? ORDER BY s.id DESC LIMIT 8`, [sid]);
   res.json({
-    today: { total: now.total, trx: now.trx, avg: now.trx ? round2(now.total / now.trx) : 0, profit: round2(margin.m - disc.d), yesterday: yest.total },
+    today: { total: now.total, trx: now.trx, avg: now.trx ? round2(now.total / now.trx) : 0, profit: round2(net.n - hpp.c), yesterday: yest.total },
     days, top, low_count: low.n, low_list: lowList, stock_value: val.v, product_count: val.n,
     receivable: ar, payable: ap, open_purchases: open.n, recent,
   });

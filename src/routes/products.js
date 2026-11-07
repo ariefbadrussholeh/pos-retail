@@ -5,11 +5,10 @@ const { wrap, err, num, like, page, round2, round3 } = require('../services/util
 const stock = require('../services/stock');
 const barcode = require('../services/barcode');
 const settings = require('../services/settings');
-const pricing = require('../services/pricing');
 const catalog = require('../services/catalog');
 const ExcelJS = require('exceljs');
 
-const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.item_id, p.buy_price, p.sell_price, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active';
+const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.item_id, p.buy_price, p.sell_price, p.price_ekatalog, p.price_sp, p.price_langsung, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active';
 const FROM = 'FROM products p LEFT JOIN categories c ON c.id = p.category_id';
 
 // Katalog ringkas untuk layar kasir (difilter di browser agar pencarian instan)
@@ -46,38 +45,22 @@ router.post('/barcode/fill', auth, owner, wrap(async (req, res) => {
   res.json({ filled: n });
 }));
 
-// Ekspor Excel acuan harga e-katalog (mengikuti format RINCIAN BARANG E-CATALOG): harga dasar sampai harga e-katalog
-// dihitung dari HARGA DASAR + pengaturan acuan harga toko, bukan dari harga jual di master.
-router.get('/export/ecatalog', auth, owner, wrap(async (req, res) => {
-  const cfg = await settings.get(req.sid);
-  const rows = await db.query('SELECT sku, name, unit, buy_price FROM products WHERE store_id = ? AND active = 1 ORDER BY name', [req.sid]);
-  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('E-Katalog');
-  ws.getCell('A1').value = 'Parameter toko ' + (req.store ? req.store.name : ''); ws.getCell('A1').font = { bold: true };
-  const P = [['Akomodasi (Rp)', cfg.price_akomodasi], ['Laba (%)', cfg.price_laba], ['PPH (%)', cfg.price_pph], ['PPN (%)', cfg.price_ppn]];
-  P.forEach(([k, v], i) => { ws.getCell(2, 3 + i * 2).value = k; ws.getCell(2, 4 + i * 2).value = v; ws.getCell(2, 3 + i * 2).font = { bold: true }; ws.getCell(2, 4 + i * 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }; });
-  // D2 akomodasi, F2 laba, H2 pph, J2 ppn
-  const head = ['No', 'SKU', 'Nama Barang', 'Satuan', 'Harga Dasar', 'Akomodasi', 'Jumlah', 'Laba', 'Total Jumlah & Laba (harga offline)', 'PPH', 'Total Blm PPN', 'PPN', 'Total (Harga E-Katalog)'];
+// Ekspor Excel daftar harga: harga dasar, harga e-katalog, harga SP, dan harga langsung (apa adanya dari master barang toko aktif)
+router.get('/export/harga', auth, owner, wrap(async (req, res) => {
+  const rows = await db.query('SELECT sku, name, unit, buy_price, price_ekatalog, price_sp, price_langsung FROM products WHERE store_id = ? AND active = 1 ORDER BY name', [req.sid]);
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Harga Barang');
+  ws.getCell('A1').value = 'Daftar harga barang - ' + (req.store ? req.store.name : ''); ws.getCell('A1').font = { bold: true, size: 13 };
+  ws.getCell('A2').value = 'Per tanggal ' + db.today(); ws.getCell('A2').font = { color: { argb: 'FF787774' } };
+  const head = ['No', 'SKU', 'Nama Barang', 'Satuan', 'Harga Dasar', 'Harga E-Katalog', 'Harga SP', 'Harga Langsung'];
   const hr = ws.getRow(4); head.forEach((h, i) => { const c = hr.getCell(i + 1); c.value = h; c.font = { bold: true }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = { bottom: { style: 'thin' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; });
-  hr.height = 32;
   rows.forEach((r, i) => {
-    const n = 5 + i; const c = pricing.calc(r.buy_price, cfg); const row = ws.getRow(n);
-    row.getCell(1).value = i + 1; row.getCell(2).value = r.sku; row.getCell(3).value = r.name; row.getCell(4).value = r.unit;
-    row.getCell(5).value = c.dasar;
-    row.getCell(6).value = { formula: '$D$2', result: c.akomodasi };
-    row.getCell(7).value = { formula: `E${n}+F${n}`, result: c.jumlah };
-    row.getCell(8).value = { formula: `G${n}*$F$2/100`, result: c.laba };
-    row.getCell(9).value = { formula: `G${n}+H${n}`, result: c.offline };
-    row.getCell(10).value = { formula: `I${n}*$H$2/100`, result: c.pph };
-    row.getCell(11).value = { formula: `I${n}+J${n}`, result: c.beforePpn };
-    row.getCell(12).value = { formula: `I${n}*$J$2/100`, result: c.ppn };
-    row.getCell(13).value = { formula: `K${n}+L${n}`, result: c.inaproc };
-    for (let k = 5; k <= 13; k++) row.getCell(k).numFmt = '#,##0';
-    row.getCell(13).font = { bold: true };
+    const row = ws.getRow(5 + i);
+    [i + 1, r.sku, r.name, r.unit, r.buy_price, r.price_ekatalog, r.price_sp, r.price_langsung].forEach((v, k) => { const c = row.getCell(k + 1); c.value = k >= 4 ? Number(v) : v; if (k >= 4) c.numFmt = '#,##0'; });
   });
-  [6, 14, 40, 9, 14, 12, 14, 12, 22, 12, 16, 12, 20].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [6, 14, 40, 9, 14, 18, 14, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state: 'frozen', ySplit: 4, xSplit: 3 }];
   res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.set('Content-Disposition', `attachment; filename="rincian-barang-ecatalog_${db.today()}.xlsx"`);
+  res.set('Content-Disposition', `attachment; filename="daftar-harga_${db.today()}.xlsx"`);
   await wb.xlsx.write(res); res.end();
 }));
 
@@ -92,7 +75,7 @@ function clean(b, creating) {
   const str = (k, max) => { if (k in b) d[k] = b[k] == null || b[k] === '' ? null : String(b[k]).trim().slice(0, max); };
   str('sku', 50); str('barcode', 60); str('name', 200); str('unit', 20);
   if ('category_id' in b) d.category_id = b.category_id || null;
-  for (const k of ['buy_price', 'sell_price', 'wholesale_price']) if (k in b) { d[k] = round2(num(b[k])); if (d[k] < 0) throw err(400, 'Harga tidak boleh negatif'); }
+  for (const k of ['buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price']) if (k in b) { d[k] = round2(num(b[k])); if (d[k] < 0) throw err(400, 'Harga tidak boleh negatif'); }
   for (const k of ['wholesale_min', 'min_stock']) if (k in b) d[k] = round3(Math.max(num(b[k]), 0));
   if ('active' in b) d.active = b.active ? 1 : 0;
   if (creating) {
@@ -120,14 +103,10 @@ async function checkBarcode(t, code, exceptItem) {
 async function checkCategory(t, id) {
   if (id && !(await t.one('SELECT id FROM categories WHERE id = ?', [id]))) throw err(400, 'Kategori tidak ditemukan');
 }
-// Harga jual awal = harga offline dari acuan harga toko (bila tidak diisi)
-function defaultSell(d, cfg) { if (d.sell_price == null) d.sell_price = pricing.calc(d.buy_price || 0, cfg).offline; }
-
 router.post('/', auth, owner, wrap(async (req, res) => {
   const d = clean(req.body, true);
   const opening = round3(num(req.body.stock));
   const cfg = await settings.get(req.sid);
-  defaultSell(d, cfg);
   const id = await db.tx(async (t) => {
     if (!d.sku) d.sku = await autoSku(t);
     if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
@@ -209,7 +188,6 @@ router.post('/import', auth, owner, wrap(async (req, res) => {
           if (!d.sku) d.sku = await autoSku(t);
           if (!d.barcode && cfg.auto_barcode) d.barcode = await barcode.next(t);
           await checkBarcode(t, d.sku, 0); await checkBarcode(t, d.barcode, 0);
-          defaultSell(d, cfg);
           d.store_id = req.sid; d.created_at = t.now(); d.stock = 0;
           const pid = await t.insert('products', d);
           await t.exec('UPDATE products SET item_id = id WHERE id = ?', [pid]);

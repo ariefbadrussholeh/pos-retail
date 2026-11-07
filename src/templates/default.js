@@ -1,6 +1,6 @@
 // TEMPLATE BAWAAN: Invoice ("Nota Penjualan"), Surat Jalan, Permohonan Pembayaran (penjualan & pembelian).
 // Dipakai semua toko yang belum memilih template lain. Warna & logo: logo dari Pengaturan toko, warna di bawah ini.
-const { rp, qtyf, tgl, terbilang, taxLabel, refRows } = require('./util');
+const { rp, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows } = require('./util');
 const settings = require('../services/settings');
 
 const ACCENT = '#E8710A'; // warna header tabel invoice
@@ -154,10 +154,11 @@ function invoice(doc, s, d, logo) {
   table(doc, cols, rows, { accent, grid: true });
 
   const t = [];
-  if (d.tax || d.discount) t.push(['Sub Total', rp(d.subtotal)]);
+  if (d.tax || d.pph || d.discount) t.push(['Sub Total', rp(d.subtotal)]);
   if (d.discount) t.push(['Diskon', '- ' + rp(d.discount)]);
   if (d.tax) t.push([taxLabel(s, d), rp(d.tax)]);
-  t.push([d.tax || d.discount ? 'TOTAL' : 'JUMLAH', rp(d.total), true]);
+  if (d.pph) t.push([pphLabel(d), rp(d.pph)]);
+  t.push([d.tax || d.pph || d.discount ? 'TOTAL' : 'JUMLAH', rp(d.total), true]);
   if (d.paid && d.paid < d.total) { t.push(['Dibayar', rp(d.paid)]); t.push(['Sisa tagihan', rp(d.total - d.paid), true]); }
   const yTot = doc.y;
   totalsBox(doc, t);

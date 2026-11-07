@@ -3,7 +3,7 @@
 // rekening, dan penandatangan tetap diambil dari Pengaturan toko. Dipilih per toko di Pengaturan > Template dokumen.
 const fs = require('fs');
 const path = require('path');
-const { num, qtyf, tgl, terbilang, taxLabel, refRows } = require('./util');
+const { num, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows } = require('./util');
 
 const A = (f) => fs.readFileSync(path.join(__dirname, 'ardana', f)); // gambar template
 const IMG = { logo: A('logo.png'), header: A('header.png'), footer: A('footer.png'), icon: A('phone.png') };
@@ -124,6 +124,7 @@ function invoice(doc, s, d, imgs) {
   const tot = [['Sub Total', d.subtotal]];
   if (d.discount) tot.push(['Diskon', -d.discount]);
   if (d.tax) tot.push([taxLabel(s, d), d.tax]);
+  if (d.pph) tot.push([pphLabel(d), d.pph]);
   tot.push(['Total', d.total, true]);
   if (d.paid && d.paid < d.total) { tot.push(['Dibayar', d.paid]); tot.push(['Sisa', d.total - d.paid, true]); }
   const bh = tot.length * 20 + 4; y = room(doc, y, Math.max(bh, 80) + 130);

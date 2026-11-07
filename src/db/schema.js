@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./index');
 
-const VERSION = 5; // 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
+const VERSION = 6; // 6 = harga manual (e-katalog/SP/langsung per barang), PPH; 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
 const INDEXES = [
   'CREATE INDEX idx_products_barcode ON products(barcode)',
   'CREATE INDEX idx_products_name ON products(name)',
@@ -47,6 +47,12 @@ const ADD_COLS = [
   ['sales', 'tax_mode', 'VARCHAR(8)'],
   ['sales', 'tax_rate', 'DECIMAL(6,2) NOT NULL DEFAULT 0'],
   ['sales', 'spp_to', 'VARCHAR(300)'],
+  ['sales', 'pph_mode', 'VARCHAR(8)'],
+  ['sales', 'pph_rate', 'DECIMAL(6,2) NOT NULL DEFAULT 0'],
+  ['sales', 'pph', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
+  ['products', 'price_ekatalog', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
+  ['products', 'price_sp', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
+  ['products', 'price_langsung', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
 ];
 // kolom UNIQUE lama (global) yang diganti unik per toko
 const OLD_UNIQUE = [['categories', 'name'], ['products', 'sku'], ['sales', 'sale_no'], ['purchases', 'po_no'], ['goods_receipts', 'gr_no'], ['opnames', 'opname_no']];
@@ -107,6 +113,7 @@ async function createSchema() {
     await db.exec("UPDATE users SET store_id = 1 WHERE role = 'kasir' AND store_id IS NULL");
   }
   if (ver < 5) await migrateV5();
+  if (ver < 6) await migrateV6();
   for (const ix of INDEXES) {
     try { await db.exec(pg ? ix.replace(/CREATE (UNIQUE )?INDEX/, (m) => m + ' IF NOT EXISTS') : ix); }
     catch (e) { if (!/exist|Duplicate key name/i.test(e.message)) throw e; }
@@ -134,6 +141,25 @@ async function migrateV5() {
   await require('../services/catalog').fillAllStores(db);
   await db.exec("UPDATE sales SET kind = 'INAPROC' WHERE kind = 'CUSTOM'");
   await db.exec("UPDATE sales SET contract_no = po_ref WHERE (contract_no IS NULL OR contract_no = '') AND po_ref IS NOT NULL AND po_ref <> ''");
+}
+// v6: harga e-katalog / SP / langsung disimpan manual per barang per toko. Barang lama diisi dari acuan harga v1.5
+// (pengaturan price_* toko) supaya harga yang sedang berlaku tidak berubah; setelah itu murni isian manual.
+async function migrateV6() {
+  const stores = await db.query('SELECT id FROM stores');
+  const r2 = (x) => Math.round(x * 100) / 100;
+  for (const st of stores) {
+    const rows = await db.query("SELECT k, v FROM store_settings WHERE store_id = ? AND k LIKE 'price_%'", [st.id]);
+    const c = { price_akomodasi: 2000, price_laba: 15, price_pph: 1.5, price_ppn: 11 };
+    for (const r of rows) if (r.k in c && r.v !== '' && !Number.isNaN(Number(r.v))) c[r.k] = Number(r.v);
+    const prods = await db.query('SELECT id, buy_price FROM products WHERE store_id = ? AND price_ekatalog = 0 AND price_sp = 0 AND price_langsung = 0', [st.id]);
+    for (const p of prods) {
+      const jumlah = r2(Number(p.buy_price) + c.price_akomodasi);
+      const offline = r2(jumlah + r2(jumlah * c.price_laba / 100));
+      const ekat = r2(offline + r2(offline * c.price_pph / 100) + r2(offline * c.price_ppn / 100));
+      await db.exec('UPDATE products SET price_ekatalog = ?, price_sp = ?, price_langsung = ? WHERE id = ?', [ekat, offline, offline, p.id]);
+    }
+  }
+  await db.exec("DELETE FROM store_settings WHERE k IN ('price_akomodasi', 'price_laba', 'price_pph', 'price_ppn')");
 }
 // Jenis dokumen awal untuk Penjualan INAPROC (bisa diubah di menu Master Dokumen). "Lainnya" selalu tersedia di layar upload.
 const DOC_TYPES = ['Surat Pesanan (SP)', 'Kontrak / SPK', 'Berita Acara Serah Terima (BAST)', 'Surat Jalan (bertanda tangan)', 'Invoice / Kwitansi', 'Faktur Pajak', 'Bukti Transfer'];

@@ -37,67 +37,96 @@
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. dokumen / pelanggan', grow: true }, { name: 'kind', label: 'Jenis', type: 'select', options: [['FAKTUR', 'Semua jenis'], ['INAPROC', 'INAPROC'], ['SP', 'SP'], ['LANGSUNG', 'Langsung']] }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
     actions: '<a href="#/invoice/new"><button class="primary">Buat penjualan faktur</button></a>',
     url: (q) => '/api/sales?' + POS.qs({ ...q, kind: q.kind || 'FAKTUR' }),
-    cols: [{ h: 'No. dokumen', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>` }, { h: 'Jenis', f: (r) => A.kindTag(r.kind) }, { h: 'Tanggal', f: (r) => POS.d(r.created_at.slice(0, 10)) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || '-') }, { h: 'No. Kontrak / SP', f: (r) => `<span class="mono" style="font-size:12px">${esc(r.contract_no || '')}</span>` }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
+    cols: [{ h: 'No. dokumen', f: (r) => `<span class="mono">${esc(r.sale_no)}</span>` }, { h: 'Jenis', f: (r) => A.kindTag(r.kind) }, { h: 'Tanggal', f: (r) => POS.d(r.created_at.slice(0, 10)) }, { h: 'Pelanggan', f: (r) => esc(r.customer_name || '-') }, { h: 'No. Kontrak / SP', f: (r) => `<span class="mono" style="font-size:12px">${esc(r.contract_no || '')}</span>` }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: (r) => A.btn('view', 'Detail') + ' ' + A.btn('docs', 'Dokumen') + (r.status === 'DONE' ? ' ' + A.btn('edit', 'Ubah') : '') + ' ' + A.btn('del', 'Hapus', 'sm danger') }],
     onRow: (r, reload) => A.saleDetail(r.id, reload),
-    onAct: (act, r, reload) => A.saleDetail(r.id, reload),
+    async onAct(act, r, reload) {
+      if (act === 'docs') return A.saleDocsModal(r.id, r.sale_no);
+      if (act === 'edit') { location.hash = '#/invoice/edit/' + r.id; return; }
+      if (act === 'del') {
+        if (!(await POS.confirm(`Hapus penjualan ${r.sale_no}? Stok dikembalikan, pembayaran dan dokumen pendukungnya ikut terhapus. Tindakan ini tidak bisa dibatalkan.`, 'Hapus', true))) return;
+        try { await POS.del('/api/invoices/' + r.id); toast('Penjualan dihapus', 'ok'); reload(); } catch (e) { toast(e.message, 'err'); }
+        return;
+      }
+      A.saleDetail(r.id, reload);
+    },
   }) });
 
   const TYPE_INFO = {
-    INAPROC: 'Harga acuan INAPROC = harga offline + PPH + PPN. Harga boleh diubah per baris. PPN sudah termasuk dalam harga (tidak bisa diganti).',
-    SP: 'Harga = harga offline (acuan dari harga dasar), tidak bisa diedit. Subtotal di atas Rp 2.000.000 wajib PPN.',
-    LANGSUNG: 'Harga = harga offline (acuan dari harga dasar), tidak bisa diedit. Subtotal di atas Rp 2.000.000 wajib PPN.',
+    INAPROC: 'Harga = Harga E-Katalog barang (diisi di master barang). Harga boleh diubah per baris.',
+    SP: 'Harga = Harga SP barang (diisi di master barang), tidak bisa diedit.',
+    LANGSUNG: 'Harga = Harga Langsung barang (diisi di master barang), tidak bisa diedit.',
   };
-  A.route('invoice', { title: 'Penjualan Faktur baru', async render(el) {
-    const [cust, S] = [(await POS.get('/api/customers?limit=500&active=1')).rows, A.ST];
-    let customers = cust; let lines = []; let dueTouched = false; let type = 'INAPROC';
-    const minPpn = S.ppn_wajib_min || 2000000; const rate = S.price_ppn;
-    el.innerHTML = A.head('Penjualan Faktur baru', 'Faktur di luar POS. Harga diambil dari acuan harga (harga dasar + pengaturan), bukan dari harga jual di master barang.', '<a href="#/invoices"><button>Kembali</button></a>') + `
+  const PRICE_KEY = { INAPROC: 'price_ekatalog', SP: 'price_sp', LANGSUNG: 'price_langsung' };
+  const PRICE_NAME = { INAPROC: 'Harga E-Katalog', SP: 'Harga SP', LANGSUNG: 'Harga Langsung' };
+  const MODE_OPTS = (name) => `<option value="NONE">Tanpa ${name}</option><option value="EXCLUDE">${name} ditambahkan ke harga</option><option value="INCLUDE">Harga sudah termasuk ${name}</option>`;
+  // Form penjualan faktur: baru (#/invoice/new) dan ubah (#/invoice/edit/ID)
+  A.route('invoice', { title: 'Penjualan Faktur', async render(el, rest) {
+    const editId = rest && rest[0] === 'edit' ? +rest[1] : 0;
+    const cust = (await POS.get('/api/customers?limit=500&active=1')).rows; const S = A.ST;
+    let sale = null;
+    if (editId) { sale = await POS.get('/api/sales/' + editId); if (sale.kind === 'POS' || sale.status !== 'DONE') throw new Error('Transaksi ini tidak bisa diubah'); }
+    let customers = cust; let lines = []; let dueTouched = !!sale; let type = sale ? sale.kind : 'INAPROC'; const origType = type;
+    if (sale) {
+      const ps = await Promise.all([...new Set(sale.items.map((i) => i.product_id))].map((id) => POS.get('/api/products/' + id).catch(() => null)));
+      const pm = new Map(ps.filter(Boolean).map((p) => [p.id, p]));
+      lines = sale.items.map((i) => { const p = pm.get(i.product_id) || {}; return { product_id: i.product_id, sku: i.sku, name: i.name, unit: i.unit, stock: p.stock || 0, price_ekatalog: p.price_ekatalog || 0, price_sp: p.price_sp || 0, price_langsung: p.price_langsung || 0, qty: i.qty, price: i.price, savedPrice: i.price, edited: true }; });
+    }
+    if (sale && !customers.some((c) => c.id === sale.customer_id)) customers = [...customers, { id: sale.customer_id, name: sale.customer_name }];
+    el.innerHTML = A.head(sale ? 'Ubah penjualan ' + sale.sale_no : 'Penjualan Faktur baru', 'Faktur di luar POS. Harga diambil dari harga e-katalog / SP / langsung di master barang (bukan harga jual POS).', '<a href="#/invoices"><button>Kembali</button></a>') + `
       <div class="card"><h3>Jenis penjualan</h3>
         <div class="seg" id="i_type" role="radiogroup" aria-label="Jenis penjualan">${Object.entries({ INAPROC: 'Penjualan INAPROC', SP: 'Penjualan SP', LANGSUNG: 'Penjualan Langsung' }).map(([k, v]) => `<button type="button" role="radio" data-t="${k}" aria-checked="${k === type}" class="${k === type ? 'primary' : ''}">${v}</button>`).join('')}</div>
         <div class="hint" id="i_tinfo" style="margin-top:8px"></div></div>
       <div class="card" style="margin-top:14px"><h3>Pelanggan &amp; dokumen</h3><div class="form-grid">
         <div><label class="f">Pelanggan (perusahaan / instansi) *</label><div style="display:flex;gap:6px"><select id="i_cust"></select><button type="button" class="sm" id="i_newc" style="white-space:nowrap">Baru</button></div></div>
-        <div><label class="f">Nomor dokumen</label><input id="i_no" placeholder="otomatis"><div class="hint" id="i_nohint"></div></div>
-        <div><label class="f">Tanggal dokumen</label><input type="date" id="i_date" value="${today}"></div>
-        <div><label class="f">Jatuh tempo pembayaran</label><input type="date" id="i_due" value="${plus(today, S.default_due_days || 14)}"></div>
-        <div><label class="f">No. Kontrak / SP</label><input id="i_ctr" autocomplete="off" placeholder="Contoh: EP-01M47T6VJVV4KBCBZ0HWNPG0NN"></div>
-        <div><label class="f">Tanggal Kontrak / SP</label><input type="date" id="i_ctrd"></div>
+        <div><label class="f">Nomor dokumen</label><input id="i_no" placeholder="otomatis" value="${sale ? esc(sale.sale_no) : ''}"><div class="hint" id="i_nohint"></div></div>
+        <div><label class="f">Tanggal dokumen</label><input type="date" id="i_date" value="${sale ? (sale.doc_date || sale.created_at.slice(0, 10)) : today}"></div>
+        <div><label class="f">Jatuh tempo pembayaran</label><input type="date" id="i_due" value="${sale ? sale.due_date || '' : plus(today, S.default_due_days || 14)}"></div>
+        <div><label class="f">No. Kontrak / SP</label><input id="i_ctr" autocomplete="off" placeholder="Contoh: EP-01M47T6VJVV4KBCBZ0HWNPG0NN" value="${sale ? esc(sale.contract_no || '') : ''}"></div>
+        <div><label class="f">Tanggal Kontrak / SP</label><input type="date" id="i_ctrd" value="${sale ? sale.contract_date || '' : ''}"></div>
       </div></div>
       <div class="card" style="margin-top:14px"><h3>Barang</h3><div id="i_items"></div></div>
       <div class="card" style="margin-top:14px"><h3>Pajak, pembayaran &amp; catatan</h3><div class="form-grid">
-        <div><label class="f">Pajak</label><select id="i_tax"><option value="NONE">Tanpa PPN</option><option value="EXCLUDE">PPN ${rate}% ditambahkan</option></select><div class="hint" id="i_taxhint"></div></div>
-        <div><label class="f">Dibayar di muka (Rp)</label><input id="i_paid" value="0" inputmode="decimal"><div class="hint">0 = belum dibayar, otomatis tercatat sebagai piutang.</div></div>
-        <div><label class="f">Metode pembayaran</label><select id="i_method">${Object.entries(POS.METHOD).filter(([k]) => k !== 'KREDIT').map(([k, v]) => `<option value="${k}" ${k === 'TRANSFER' ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
-        <div><label class="f">Catatan</label><input id="i_note"></div>
+        <div><label class="f">PPN</label><select id="i_tax">${MODE_OPTS('PPN')}</select></div>
+        <div><label class="f">Tarif PPN (%)</label><input id="i_taxr" value="${sale && sale.tax_mode !== 'NONE' ? sale.tax_rate : 11}" inputmode="decimal"></div>
+        <div><label class="f">PPH</label><select id="i_pph">${MODE_OPTS('PPH')}</select></div>
+        <div><label class="f">Tarif PPH (%)</label><input id="i_pphr" value="${sale && sale.pph_mode && sale.pph_mode !== 'NONE' ? sale.pph_rate : 1.5}" inputmode="decimal"></div>
+        <div class="span2 hint" style="margin-top:-6px">PPN dan PPH dihitung dari harga sebelum pajak. "Sudah termasuk" berarti pajak sudah ada di dalam harga satuan; "ditambahkan" berarti menambah total.</div>
+        ${sale ? `<div class="span2"><div class="muted" style="font-size:12px">Sudah dibayar</div><div class="mono">${money(sale.paid)}</div><div class="hint">Pembayaran diubah lewat tombol Terima pembayaran di detail transaksi.</div></div>`
+    : `<div><label class="f">Dibayar di muka (Rp)</label><input id="i_paid" value="0" inputmode="decimal"><div class="hint">0 = belum dibayar, otomatis tercatat sebagai piutang.</div></div>
+        <div><label class="f">Metode pembayaran</label><select id="i_method">${Object.entries(POS.METHOD).filter(([k]) => k !== 'KREDIT').map(([k, v]) => `<option value="${k}" ${k === 'TRANSFER' ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>`}
+        <div class="span2"><label class="f">Catatan</label><input id="i_note" value="${sale ? esc(sale.note || '') : ''}"></div>
       </div><div id="i_tot" style="margin-top:14px"></div><div id="i_err" class="err hidden"></div></div>
-      <div class="sticky-save"><button class="primary" id="i_save">Simpan penjualan <kbd>Ctrl+S</kbd></button></div>`;
+      <div class="sticky-save"><button class="primary" id="i_save">${sale ? 'Simpan perubahan' : 'Simpan penjualan'} <kbd>Ctrl+S</kbd></button></div>`;
+    if (sale) { $('#i_tax', el).value = sale.tax_mode || 'NONE'; $('#i_pph', el).value = sale.pph_mode || 'NONE'; }
 
     const drawCust = (sel) => { $('#i_cust', el).innerHTML = '<option value="">- pilih -</option>' + customers.map((c) => `<option value="${c.id}" ${String(c.id) === String(sel) ? 'selected' : ''}>${esc(c.name)}</option>`).join(''); };
-    drawCust('');
+    drawCust(sale ? sale.customer_id : '');
     $('#i_newc', el).onclick = async () => {
       const c = await A.form({ title: 'Pelanggan baru', fields: [{ name: 'name', label: 'Nama perusahaan / instansi', required: true, span: 2 }, { name: 'address', label: 'Alamat', span: 2 }, { name: 'spp_to', label: 'Alamat tujuan SPP (Kepada Yth.)', type: 'textarea', rows: 2, span: 2 }, { name: 'phone', label: 'Telepon' }, { name: 'npwp', label: 'NPWP' }], onSubmit: (v) => POS.post('/api/customers', v) });
       if (c && c.id) { customers = [...customers, c]; drawCust(c.id); }
     };
-    const peek = A.debounce(async () => { try { const r = await POS.get('/api/invoices/next-no?date=' + ($('#i_date', el).value || today)); $('#i_nohint', el).textContent = 'Berikutnya: ' + r.no; } catch (_) {} }, 200);
+    const peek = A.debounce(async () => { if (sale) return; try { const r = await POS.get('/api/invoices/next-no?date=' + ($('#i_date', el).value || today)); $('#i_nohint', el).textContent = 'Berikutnya: ' + r.no; } catch (_) {} }, 200);
     peek();
     $('#i_date', el).addEventListener('change', () => { peek(); if (!dueTouched) $('#i_due', el).value = plus($('#i_date', el).value || today, S.default_due_days || 14); });
     $('#i_due', el).addEventListener('change', () => { dueTouched = true; });
 
     // ----- baris barang -----
     const num = (v) => POS.toNum(v) || 0;
+    const r2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
     const itemsEl = $('#i_items', el);
     const lineTotal = (l) => Math.max(num(l.qty) * num(l.price), 0);
     const editable = () => type === 'INAPROC';
-    const refPrice = (l) => { const c = POS.priceCalc(l.buy_price, S); return type === 'INAPROC' ? c.inaproc : c.offline; };
+    // harga acuan baris untuk jenis aktif; saat mengubah dan jenisnya tidak berganti, harga yang tercatat dipertahankan
+    const refPrice = (l) => (sale && type === origType && l.savedPrice != null ? l.savedPrice : num(l[PRICE_KEY[type]]));
     function draw() {
       const ed = editable();
-      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang</th><th style="width:84px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:140px">Harga${ed ? '' : ' (acuan)'}</th><th class="r" style="width:130px">Jumlah</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td>${ed ? `<input data-k="name" value="${esc(l.name)}">` : esc(l.name)}${l.buy_price > 0 ? '' : '<div class="hint" style="color:var(--red)">Harga dasar belum diisi di master barang</div>'}<div class="muted" style="font-size:11.5px">${esc(l.sku)} &middot; stok ${nf(l.stock)}</div></td><td>${ed ? `<input data-k="unit" value="${esc(l.unit)}">` : esc(l.unit)}</td><td><input class="r mono" data-k="qty" value="${esc(l.qty)}" inputmode="decimal"></td><td class="r">${ed ? `<input class="r mono" data-k="price" value="${esc(l.price)}" inputmode="decimal">${num(l.price) !== refPrice(l) ? `<div class="muted" style="font-size:11.5px">acuan ${money(refPrice(l))}</div>` : ''}` : `<span class="mono">${money(l.price)}</span>`}</td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td><button class="sm danger" data-del title="Hapus baris">&times;</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted center" style="padding:18px">Belum ada barang. Tekan Insert atau klik Tambah barang.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
+      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang</th><th style="width:84px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:140px">${PRICE_NAME[type]}</th><th class="r" style="width:130px">Jumlah</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td>${ed ? `<input data-k="name" value="${esc(l.name)}">` : esc(l.name)}${refPrice(l) > 0 ? '' : `<div class="hint" style="color:var(--red)">${PRICE_NAME[type]} belum diisi di master barang</div>`}<div class="muted" style="font-size:11.5px">${esc(l.sku)} &middot; stok ${nf(l.stock)}</div></td><td>${ed ? `<input data-k="unit" value="${esc(l.unit)}">` : esc(l.unit)}</td><td><input class="r mono" data-k="qty" value="${esc(l.qty)}" inputmode="decimal"></td><td class="r">${ed ? `<input class="r mono" data-k="price" value="${esc(l.price)}" inputmode="decimal">${num(l.price) !== refPrice(l) ? `<div class="muted" style="font-size:11.5px">e-katalog ${money(refPrice(l))}</div>` : ''}` : `<span class="mono">${money(l.price)}</span>`}</td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td><button class="sm danger" data-del title="Hapus baris">&times;</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted center" style="padding:18px">Belum ada barang. Tekan Insert atau klik Tambah barang.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
       tot();
     }
     async function add() {
       const p = await A.pickProduct(); if (!p) return;
       const ex = lines.find((l) => l.product_id === p.id);
-      if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, buy_price: p.buy_price, qty: 1, edited: false }; l.price = refPrice(l); lines.push(l); }
+      if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, price_ekatalog: p.price_ekatalog, price_sp: p.price_sp, price_langsung: p.price_langsung, qty: 1, edited: false }; l.price = num(l[PRICE_KEY[type]]); lines.push(l); }
       draw();
     }
     itemsEl.addEventListener('click', (e) => { if (e.target.closest('[data-add]')) add(); const d = e.target.closest('[data-del]'); if (d) { lines.splice(+d.closest('tr').dataset.n, 1); draw(); } });
@@ -105,32 +134,32 @@
     itemsEl.addEventListener('input', (e) => { const k = e.target.dataset.k; if (!k) return; const tr = e.target.closest('tr'); const l = lines[+tr.dataset.n]; l[k] = e.target.value; if (k === 'price') l.edited = true; tr.querySelector('[data-lt]').textContent = money(lineTotal(l)); tot(); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Insert') { e.preventDefault(); add(); } });
 
-    // ----- jenis penjualan: memengaruhi harga & pajak -----
+    // ----- jenis penjualan: hanya memengaruhi harga -----
     function setType(t) {
       type = t;
       $$('#i_type button', el).forEach((b) => { const on = b.dataset.t === t; b.setAttribute('aria-checked', String(on)); b.classList.toggle('primary', on); });
       $('#i_tinfo', el).textContent = TYPE_INFO[t];
-      for (const l of lines) { if (t !== 'INAPROC') l.edited = false; if (!l.edited) l.price = refPrice(l); }
-      $('#i_tax', el).closest('div').classList.toggle('hidden', t === 'INAPROC');
+      for (const l of lines) { if (t !== 'INAPROC') l.edited = false; if (!l.edited || (sale && t === origType)) l.price = refPrice(l); }
       draw();
     }
     $('#i_type', el).addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) setType(b.dataset.t); });
 
     // ----- ringkasan (rumus sama dengan server) -----
     function calc() {
-      const sub = Math.round(lines.reduce((a, l) => a + lineTotal(l), 0) * 100) / 100;
-      let mode; let tax = 0; let total = sub;
-      if (type === 'INAPROC') { mode = 'INCLUDE'; tax = sub - sub / (1 + rate / 100); }
-      else { mode = sub > minPpn ? 'EXCLUDE' : $('#i_tax', el).value; if (mode === 'EXCLUDE') { tax = Math.round(sub * rate) / 100; total = sub + tax; } else mode = 'NONE'; }
-      return { subtotal: sub, discount: 0, tax: Math.round(tax * 100) / 100, total: Math.round(total * 100) / 100, paid: num($('#i_paid', el).value), mode, rate: mode === 'NONE' ? 0 : rate };
+      const sub = r2(lines.reduce((a, l) => a + lineTotal(l), 0));
+      const pm = $('#i_tax', el).value; const hm = $('#i_pph', el).value; const pr = num($('#i_taxr', el).value); const hr = num($('#i_pphr', el).value);
+      const dpp = r2(sub / (1 + ((pm === 'INCLUDE' ? pr : 0) + (hm === 'INCLUDE' ? hr : 0)) / 100));
+      const tax = pm === 'NONE' ? 0 : r2(dpp * pr / 100); const pph = hm === 'NONE' ? 0 : r2(dpp * hr / 100);
+      const total = r2(sub + (pm === 'EXCLUDE' ? tax : 0) + (hm === 'EXCLUDE' ? pph : 0));
+      return { subtotal: sub, tax, pph, total, paid: sale ? sale.paid : num($('#i_paid', el).value), pm, hm, pr, hr, taxLabel: `PPN ${pr}%${pm === 'INCLUDE' ? ' (termasuk)' : ''}`, pphLabel: `PPH ${hr}%${hm === 'INCLUDE' ? ' (termasuk)' : ''}` };
     }
     function tot() {
-      const c = calc(); const sel = $('#i_tax', el);
-      if (type !== 'INAPROC') { const must = c.subtotal > minPpn; if (must) sel.value = 'EXCLUDE'; sel.disabled = must; $('#i_taxhint', el).textContent = must ? `Subtotal di atas ${rp(minPpn)}: PPN wajib` : `PPN wajib bila subtotal di atas ${rp(minPpn)}`; }
+      const c = calc();
+      $('#i_taxr', el).disabled = c.pm === 'NONE'; $('#i_pphr', el).disabled = c.hm === 'NONE';
       $('#i_tot', el).innerHTML = A.totalsBox(c) + (c.paid && c.paid < c.total ? `<div class="muted" style="text-align:right;margin-top:6px">Sisa tagihan (piutang): <b class="mono">${money(c.total - c.paid)}</b></div>` : '');
     }
-    ['#i_tax', '#i_paid'].forEach((s) => { $(s, el).addEventListener('input', tot); $(s, el).addEventListener('change', tot); });
-    setType('INAPROC');
+    ['#i_tax', '#i_taxr', '#i_pph', '#i_pphr', '#i_paid'].forEach((s) => { const n = $(s, el); if (n) { n.addEventListener('input', tot); n.addEventListener('change', tot); } });
+    setType(type);
 
     async function save() {
       const err = $('#i_err', el); err.classList.add('hidden'); const btn = $('#i_save', el);
@@ -138,15 +167,16 @@
       const body = {
         type, customer_id: $('#i_cust', el).value, doc_no: $('#i_no', el).value.trim(), doc_date: $('#i_date', el).value, due_date: $('#i_due', el).value || null,
         contract_no: $('#i_ctr', el).value.trim(), contract_date: $('#i_ctrd', el).value || null,
-        tax_mode: c.mode, paid: c.paid, method: $('#i_method', el).value, note: $('#i_note', el).value,
+        tax_mode: c.pm, tax_rate: c.pr, pph_mode: c.hm, pph_rate: c.hr, note: $('#i_note', el).value,
         items: lines.map((l) => ({ product_id: l.product_id, name: l.name, unit: l.unit, qty: num(l.qty), price: type === 'INAPROC' ? num(l.price) : undefined })),
       };
+      if (!sale) { body.paid = c.paid; body.method = $('#i_method', el).value; }
       try {
         if (!body.customer_id) throw new Error('Pilih pelanggan');
         if (!body.items.length) throw new Error('Tambahkan minimal satu barang');
         btn.disabled = true;
-        const r = await POS.post('/api/invoices', body);
-        toast('Tersimpan: ' + r.sale_no, 'ok'); location.hash = '#/invoices'; setTimeout(() => A.saleDetail(r.id, () => {}), 350);
+        const r = sale ? await POS.put('/api/invoices/' + sale.id, body) : await POS.post('/api/invoices', body);
+        toast('Tersimpan: ' + r.sale_no, 'ok'); location.hash = '#/invoices'; if (!sale) setTimeout(() => A.saleDetail(r.id, () => {}), 350);
       } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); btn.disabled = false; err.scrollIntoView({ block: 'nearest' }); }
     }
     $('#i_save', el).onclick = save;

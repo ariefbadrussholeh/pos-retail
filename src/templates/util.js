@@ -39,4 +39,6 @@ function refRows(d) {
   if (d.contract_no) r.push(['No. Kontrak / SP', d.contract_no + (d.contract_date ? ' / ' + tgl(d.contract_date) : '')]);
   return r;
 }
-module.exports = { F, BULAN, rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows };
+// Nama PPH untuk ringkasan: "PPH 1.5%" / "PPH 1.5% (termasuk)"
+function pphLabel(d) { return `PPH${d.pph_rate ? ' ' + d.pph_rate + '%' : ''}${d.pph_mode === 'INCLUDE' ? ' (termasuk)' : ''}`; }
+module.exports = { pphLabel, F, BULAN, rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows };
