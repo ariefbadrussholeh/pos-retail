@@ -41,7 +41,7 @@
       { name: 'price_langsung', label: 'Harga Langsung', type: 'number', hint: 'Penjualan Langsung (tidak bisa diubah di faktur)' }, { type: 'note', hint: '<div class="hint">Semua harga diisi manual, tidak dihitung otomatis.</div>' },
       { name: 'wholesale_price', label: 'Harga grosir', type: 'number', hint: 'Opsional' }, { name: 'wholesale_min', label: 'Min. qty grosir', type: 'number', hint: 'Harga grosir berlaku mulai qty ini' },
       { name: 'min_stock', label: 'Stok minimum', type: 'number', hint: 'Untuk peringatan stok menipis' },
-      { name: 'no_ppn', label: 'Bebas PPN (di faktur tidak dicentang kena PPN, semua toko)', type: 'checkbox' }, { name: 'no_pph', label: 'Bebas PPH (di faktur tidak dicentang kena PPH, semua toko)', type: 'checkbox' },
+      { name: 'no_ppn', label: 'Bebas PPN (di faktur tidak dicentang kena PPN, semua toko)', type: 'checkbox' },
       creating ? { name: 'stock', label: 'Stok awal (toko ini)', type: 'number' } : { name: 'active', label: 'Barang aktif (tampil di kasir, semua toko)', type: 'checkbox' },
     ];
   }

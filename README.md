@@ -128,11 +128,13 @@ Tiga jenis, hanya memengaruhi harga:
 - **SP**: harga = Harga SP barang, tidak bisa diedit.
 - **Langsung**: harga = Harga Langsung barang, tidak bisa diedit.
 
-**Pajak bebas untuk semua jenis**: PPN dan PPH masing-masing dipilih *Tanpa*, *Ditambahkan ke harga*, atau *Sudah termasuk harga*, dengan tarif yang bisa diubah (bawaan 11% dan 1,5%). Keduanya dihitung dari harga sebelum pajak (DPP); bila ada yang "sudah termasuk", DPP = subtotal / (1 + jumlah tarif yang termasuk). Tidak ada batas Rp 2.000.000 dan tidak ada diskon. Satu kolom **No. Kontrak / SP**.
+**Pajak**: hanya **PPN** yang ada di nota: *Tanpa*, *Ditambahkan ke harga*, atau *Sudah termasuk harga*, tarif bisa diubah (bawaan 11%). Dihitung dari harga sebelum pajak (DPP); bila "sudah termasuk", DPP = jumlah / (1 + tarif). **Semua hasil dibulatkan ke atas** ke rupiah penuh (mis. PPN 1.937,39 menjadi 1.938). Contoh: subtotal 29.065.000 + PPN 569.030 = total 29.634.030. Tidak ada batas Rp 2.000.000 dan tidak ada diskon. Satu kolom **No. Kontrak / SP**.
 
-**Barang tidak kena pajak dalam satu nota**: tiap baris di form faktur punya kotak centang **PPN** dan **PPH** (nonaktif bila mode pajaknya Tanpa). Baris yang tidak dicentang tidak ikut dasar perhitungan pajak. Di master barang ada **Bebas PPN** dan **Bebas PPH** (dipakai bersama semua toko) sebagai nilai awal centang itu saat barang ditambahkan ke nota; tetap bisa diubah per nota. Di PDF, barang bebas PPN diberi tanda `*` dengan catatan "* Barang bebas PPN".
+**PPH tidak ada di nota** (tidak ada input, tidak tercetak di invoice, surat jalan, SPP, maupun layar detail). PPH hanya dihitung otomatis untuk **laporan**, dan hanya untuk penjualan **INAPROC (e-katalog)**: di awal form INAPROC ada pilihan **Metode pembayaran instansi: UP / LS**. Tarif: **UP 0,5%**, **LS 1,5%**, dikalikan DPP (nilai sebelum PPN, semua baris), dibulatkan ke atas. SP dan Langsung: PPH = 0. Tarif ada di `src/services/pph.js` (konstanta `RATES`). Catatan: PMK 34/PMK.010/2017 (diubah PMK 110/2018 dan PMK 41/2022) menyebut PPh 22 pembelian oleh bendahara pemerintah 1,5% dari harga pembelian di luar PPN tanpa membedakan UP dan LS; tarif UP 0,5% mengikuti arahan pemilik toko, konfirmasikan ke konsultan pajak. Dasar PPH adalah DPP seluruh nota; bila ada barang bebas PPN, hasilnya berbeda dari rumus "total / 1,11 x tarif" pada contoh Excel bendahara.
 
-**Pembatasan jenis per toko (hardcode):** Toko Rizky Nabila (kode `RN`) hanya menampilkan **Penjualan Langsung**; tombol INAPROC dan SP disembunyikan dan server menolak jenis lain. Aturannya ada di `src/services/store-rules.js`, baris `RN: { fakturTypes: ['LANGSUNG'] }`. **Untuk menghilangkan pembatasan**, hapus baris `RN:` itu (atau isi `['INAPROC','SP','LANGSUNG']`), lalu restart server. Toko lain bisa ditambah dengan baris serupa memakai kode tokonya.
+**Barang tidak kena pajak dalam satu nota**: tiap baris di form faktur punya kotak centang **PPN** (nonaktif bila mode PPN Tanpa). Baris yang tidak dicentang tidak dikenai PPN. Di master barang ada **Bebas PPN** (dipakai bersama semua toko) sebagai nilai awal centang itu; tetap bisa diubah per nota. Di PDF, barang bebas PPN diberi tanda `*` dengan catatan "* Barang bebas PPN".
+
+**Aturan khusus toko (hardcode)** di `src/services/store-rules.js`, per kode toko (Ardana `AJS`, Rizky Nabila `RN`). Dua aturan saat ini: **(1) jenis faktur**: RN hanya **Penjualan Langsung**; **(2) kolom nomor di laporan Rincian Transaksi**: RN hanya "No. Invoice", AJS hanya "No. SP" (toko lain keduanya). Untuk menghilangkan salah satu, hapus properti itu (`fakturTypes` atau `reportRefs`) di baris tokonya, atau hapus seluruh baris toko, lalu restart. Keterangan sebelumnya soal RN: Toko Rizky Nabila (kode `RN`) hanya menampilkan **Penjualan Langsung**; tombol INAPROC dan SP disembunyikan dan server menolak jenis lain. Aturannya ada di `src/services/store-rules.js`, baris `RN: { fakturTypes: ['LANGSUNG'] }`. **Untuk menghilangkan pembatasan**, hapus baris `RN:` itu (atau isi `['INAPROC','SP','LANGSUNG']`), lalu restart server. Toko lain bisa ditambah dengan baris serupa memakai kode tokonya.
 
 Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (modal unggah), **Ubah**, dan **Hapus** (owner):
 
@@ -141,12 +143,12 @@ Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (moda
 
 ## Laporan: PPN, PPH, HPP, laba
 
-Rincian Transaksi Penjualan memuat kolom **No. Pesanan / SP** (isian No. Kontrak / SP). Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
+Rincian Transaksi Penjualan memuat **No. Invoice** dan/atau **No. Pesanan / SP** (sesuai aturan toko) serta kolom **UP / LS**. PPH di laporan hanya terisi untuk INAPROC. Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
 
 ### Stok, piutang, dan cetak
 
 - Stok berkurang (kartu stok tercatat), transaksi masuk laporan penjualan, dashboard, dan **piutang** (yang belum dibayar). Cicilan dan pembatalan memakai menu Penjualan yang sama.
-- Dari detail transaksi bisa cetak **Invoice, Surat Jalan, dan SPP** (PPN dan PPH tampil di ringkasan bila ada). Alamat tujuan SPP (*Kepada Yth.*) diambil dari master **Pelanggan** (kolom "Alamat tujuan SPP"); kalau kosong otomatis "Kepala [nama pelanggan] + alamat".
+- Dari detail transaksi bisa cetak **Invoice, Surat Jalan, dan SPP** (hanya PPN di ringkasan; PPH tidak dicetak). Alamat tujuan SPP (*Kepada Yth.*) diambil dari master **Pelanggan** (kolom "Alamat tujuan SPP"); kalau kosong otomatis "Kepala [nama pelanggan] + alamat".
 
 ### Dokumen pendukung
 
@@ -179,7 +181,7 @@ Pengaturan > **Template dokumen** hanya memilih template untuk toko tersebut (in
 | **Ardana** | Khusus CV Ardana Jaya Sejahtera: logo, ornamen, footer penuh, ucapan terima kasih. Tampilan tetap. |
 | **Rizky Nabila (hijau stabilo)** | Khusus Toko Rizky Nabila: kop logo RN, tabel berheader hijau stabilo (#90FA26) dengan baris kosong, kotak catatan merah, Tanda Terima / Hormat Kami. Invoice mengikuti form Excel toko; Surat Jalan dan SPP didesain dengan palet yang sama. |
 
-Catatan PDF: kata "(termasuk)" pada baris PPN/PPH tidak lagi dicetak. Di template Rizky, baris PPH tidak ditampilkan di invoice (konstanta `SHOW_PPH = false` di `src/templates/rizky.js`; ubah ke `true` untuk menampilkan), dan Surat Jalan hanya memuat Penerima dan Hormat Kami.
+Catatan PDF: kata "(termasuk)" tidak dicetak, dan PPH tidak pernah tampil di dokumen (hanya laporan). Surat Jalan Rizky hanya memuat Penerima dan Hormat Kami.
 
 Template berbentuk tetap (tanpa pilihan warna/logo), tetapi nama toko, alamat, telepon, rekening, dan penandatangan tetap diambil dari Pengaturan toko.
 

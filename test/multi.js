@@ -78,12 +78,12 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const INC = { tax_mode: 'INCLUDE', tax_rate: 11 };
   const sB0 = await stockOf(pB.id);
   const i1 = await A.post('/api/invoices', { ...base1, ...INC, discount: 99999 }); assert.equal(i1.code, 201); auto++;
-  assert.equal(i1.sale_no, '01 / X / AJS / 2026'); assert.equal(i1.kind, 'INAPROC'); assert.equal(i1.subtotal, 4300000); assert.equal(i1.discount, 0); assert.equal(i1.tax_mode, 'INCLUDE'); assert.equal(i1.tax, 426126.13); assert.equal(i1.pph, 0); assert.equal(i1.total, 4300000); assert.equal(i1.method, 'KREDIT'); assert.equal(i1.outstanding, 4300000); assert.equal(i1.contract_no, '440/1/KTR/2026');
+  assert.equal(i1.sale_no, '01 / X / AJS / 2026'); assert.equal(i1.kind, 'INAPROC'); assert.equal(i1.subtotal, 4300000); assert.equal(i1.discount, 0); assert.equal(i1.tax_mode, 'INCLUDE'); assert.equal(i1.tax, 426127); assert.equal(i1.pph, 58109); assert.equal(i1.total, 4300000); assert.equal(i1.method, 'KREDIT'); assert.equal(i1.outstanding, 4300000); assert.equal(i1.contract_no, '440/1/KTR/2026');
   assert.equal(i1.items[0].cost, 10000); ok('INAPROC: harga bebas per baris, PPN sudah termasuk, tanpa diskon, jadi piutang, harga dasar saat itu tersimpan (cost)');
   assert.equal(i1.items[1].name, 'Plastik Sampah Hitam Ukuran 90x120'); assert.equal(i1.items[0].price, 16000); assert.equal((await A.get('/api/products/' + pB.id)).sell_price, 20000); ok('harga & nama INAPROC tidak mengubah master');
   assert.equal(await stockOf(pB.id), sB0 - 100); ok('faktur: stok berkurang');
   const i2 = await A.post('/api/invoices', { ...base1, ...INC, items: [{ product_id: pB.id, qty: 1 }] }); auto++;
-  assert.equal(i2.items[0].price, 15525); assert.equal(i2.total, 15525); assert.equal(i2.tax, 1538.51); ok('INAPROC: harga default = Harga E-Katalog barang (bukan harga jual master)');
+  assert.equal(i2.items[0].price, 15525); assert.equal(i2.total, 15525); assert.equal(i2.tax, 1539); ok('INAPROC: harga default = Harga E-Katalog barang (bukan harga jual master)');
   const i3 = await A.post('/api/invoices', { ...base1, type: 'SP', paid: 13800, method: 'TRANSFER', discount: 5000, items: [{ product_id: pB.id, qty: 1, price: 1 }] }); auto++;
   assert.equal(i3.kind, 'SP'); assert.equal(i3.items[0].price, 13800); assert.equal(i3.total, 13800); assert.equal(i3.tax, 0); assert.equal(i3.tax_mode, 'NONE'); assert.equal(i3.pph_mode, 'NONE'); assert.equal(i3.method, 'TRANSFER'); assert.equal(i3.outstanding, 0); ok('SP: Harga SP terkunci (harga kiriman diabaikan), tanpa diskon, tanpa pajak bila tidak dipilih');
   const sp2 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 1 }] }); auto++; assert.equal(sp2.tax, 1518); assert.equal(sp2.total, 15318); ok('SP: PPN ditambahkan');
@@ -92,21 +92,25 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const lgNone = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', items: big }); auto++; assert.equal(lgNone.code, 201); assert.equal(lgNone.items[0].price, 13000); ok('batas Rp 2.000.000 dihapus: SP/Langsung di atas 2 juta boleh tanpa PPN');
   const spBig = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: big }); auto++; assert.equal(spBig.subtotal, 2760000); assert.equal(spBig.tax, 303600); assert.equal(spBig.total, 3063600); ok('SP: di atas Rp 2 juta dengan PPN ditambahkan');
   const lg = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', items: [{ product_id: pB2.id, qty: 1, price: 5 }] }); auto++; assert.equal(lg.kind, 'LANGSUNG'); assert.equal(lg.total, 19550); ok('Langsung: Harga Langsung terkunci');
-  // PPN & PPH bebas di semua jenis
+  // PPN bebas di semua jenis; PPH tidak ada di nota (hanya laporan); semua hasil dibulatkan ke atas
   const pp1 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, pph_mode: 'EXCLUDE', pph_rate: 1.5, items: [{ product_id: pB.id, qty: 10 }] }); auto++;
-  assert.deepEqual([pp1.subtotal, pp1.tax, pp1.pph, pp1.total, pp1.pph_mode, pp1.pph_rate], [138000, 15180, 2070, 155250, 'EXCLUDE', 1.5]); ok('PPN dan PPH ditambahkan (dari harga sebelum pajak)');
-  const pp2 = await A.post('/api/invoices', { ...base1, ...INC, pph_mode: 'INCLUDE', pph_rate: 1.5, items: [{ product_id: pB.id, qty: 1 }] }); auto++;
-  assert.deepEqual([pp2.subtotal, pp2.tax, pp2.pph, pp2.total], [15525, 1518, 207, 15525]); ok('PPN dan PPH sudah termasuk harga (DPP = harga / 1,125)');
-  const pp3 = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', tax_mode: 'INCLUDE', tax_rate: 11, pph_mode: 'EXCLUDE', pph_rate: 1.5, items: [{ product_id: pB2.id, qty: 1 }] }); auto++;
-  assert.deepEqual([pp3.tax, pp3.pph, pp3.total], [1937.39, 264.19, 19814.19]); ok('PPN termasuk + PPH ditambahkan');
-  assert.equal((await A.post('/api/invoices', { ...base1, pph_mode: 'ZZZ' })).code, 400); assert.equal((await A.post('/api/invoices', { ...base1, pph_mode: 'EXCLUDE', pph_rate: 101 })).code, 400); assert.equal((await A.post('/api/invoices', { ...base1, tax_mode: 'KOSONG' })).code, 400); ok('mode & tarif pajak divalidasi');
+  assert.deepEqual([pp1.subtotal, pp1.tax, pp1.pph, pp1.total, pp1.pay_type], [138000, 15180, 0, 153180, null]); ok('PPN ditambahkan; input PPH diabaikan, SP tidak kena PPH laporan');
+  const pp2 = await A.post('/api/invoices', { ...base1, ...INC, items: [{ product_id: pB.id, qty: 1 }] }); auto++;
+  assert.deepEqual([pp2.subtotal, pp2.tax, pp2.pph, pp2.total, pp2.pay_type], [15525, 1539, 210, 15525, 'LS']); ok('PPN sudah termasuk (dibulatkan ke atas); INAPROC default LS: PPH 1,5% dari DPP');
+  const pp3 = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', tax_mode: 'INCLUDE', tax_rate: 11, items: [{ product_id: pB2.id, qty: 1 }] }); auto++;
+  assert.deepEqual([pp3.tax, pp3.pph, pp3.total], [1938, 0, 19550]); ok('PPN dibulatkan ke atas (1937,39 menjadi 1938)');
+  // contoh pemilik: subtotal 29.065.000 + PPN 569.030 = 29.634.030; PPH laporan UP 0,5% / LS 1,5% dari DPP
+  const ex = { ...base1, tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 1, price: 5173000 }, { product_id: pB2.id, qty: 1, price: 23892000, ppn: 0 }] };
+  const exLS = await A.post('/api/invoices', { ...ex, pay_type: 'LS' }); auto++; const exUP = await A.post('/api/invoices', { ...ex, pay_type: 'UP' }); auto++;
+  assert.deepEqual([exLS.subtotal, exLS.tax, exLS.total, exLS.pph, exLS.pay_type], [29065000, 569030, 29634030, 435975, 'LS']); assert.deepEqual([exUP.total, exUP.pph, exUP.pay_type], [29634030, 145325, 'UP']);
+  assert.equal((await A.post('/api/invoices', { ...ex, pay_type: 'XX' })).code, 400); ok('contoh pemilik: total 29.634.030; PPH LS 435.975 dan UP 145.325 (hanya laporan)');
+  assert.equal((await A.post('/api/invoices', { ...base1, tax_mode: 'KOSONG' })).code, 400); assert.equal((await A.post('/api/invoices', { ...base1, tax_mode: 'EXCLUDE', tax_rate: 101 })).code, 400); ok('mode & tarif pajak divalidasi');
   // ---- barang tidak kena pajak dalam satu nota (centang per baris) + default dari master barang
   const mx1 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 10 }, { product_id: pB2.id, qty: 1, ppn: 0 }] }); auto++;
   assert.deepEqual([mx1.subtotal, mx1.tax, mx1.total], [157000, 15180, 172180]); assert.deepEqual(mx1.items.map((x) => x.ppn_on), [1, 0]); ok('PPN ditambahkan hanya untuk baris yang kena PPN');
   const mx2 = await A.post('/api/invoices', { ...base1, ...INC, items: [{ product_id: pB.id, qty: 1 }, { product_id: pB2.id, qty: 1, price: 20000, ppn: 0 }] }); auto++;
-  assert.deepEqual([mx2.subtotal, mx2.tax, mx2.total], [35525, 1538.51, 35525]); ok('PPN sudah termasuk: baris bebas PPN tidak dipecah');
-  const mx3 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, pph_mode: 'EXCLUDE', pph_rate: 1.5, items: [{ product_id: pB.id, qty: 10, pph: 0 }, { product_id: pB2.id, qty: 1, ppn: 0 }] }); auto++;
-  assert.deepEqual([mx3.tax, mx3.pph, mx3.total], [15180, 285, 172465]); ok('PPN dan PPH dicentang berbeda per baris');
+  assert.deepEqual([mx2.subtotal, mx2.tax, mx2.total], [35525, 1539, 35525]); ok('PPN sudah termasuk: baris bebas PPN tidak dipecah');
+
   await A.put('/api/products/' + pB2.id, { no_ppn: true }); assert.equal((await A.get('/api/products/' + pB2.id)).no_ppn, 1);
   A.h['x-store'] = '1'; assert.equal((await A.get('/api/products?q=Plastik Hitam 90x120')).rows[0].no_ppn, 1); A.h['x-store'] = String(B); // bebas pajak = data bersama
   const mx4 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 10 }, { product_id: pB2.id, qty: 1 }] }); auto++;
@@ -125,6 +129,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   for (const tp of ['INAPROC', 'SP']) assert.equal((await A.post('/api/invoices', { ...base1, type: tp, items: [{ product_id: prRN.id, qty: 1 }] })).code, 400);
   assert.equal((await A.post('/api/invoices', { ...base1, items: [{ product_id: prRN.id, qty: 1 }], type: undefined })).code, 201);
   const lgRN = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', items: [{ product_id: prRN.id, qty: 1 }] }); assert.equal(lgRN.code, 201); assert.equal(lgRN.kind, 'LANGSUNG');
+  const rdRN = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); assert.ok(rdRN.cols.some((c) => c.key === 'sale_no' && c.label === 'No. Invoice') && !rdRN.cols.some((c) => c.key === 'contract_no'));
   A.h['x-store'] = String(B); assert.deepEqual((await A.get('/api/settings')).faktur_types, ['INAPROC', 'SP', 'LANGSUNG']); ok('toko RN: hanya Penjualan Langsung (jenis lain ditolak server, form menerima daftar jenis); toko lain bebas');
   assert.equal((await A.post('/api/invoices', { ...base1, type: 'XYZ' })).code, 400); ok('jenis penjualan divalidasi');
   assert.equal((await A.post('/api/invoices', { ...base1, doc_no: i2.sale_no })).code, 409); ok('nomor dokumen dobel ditolak');
@@ -134,20 +139,20 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await A.post('/api/suppliers', { name: 'Pemasok bersama' })).code, 201); A.h['x-store'] = '1'; assert.equal((await A.get('/api/suppliers?q=bersama')).total, 1); A.h['x-store'] = String(B); ok('pemasok milik bersama');
   assert.equal((await A.post('/api/invoices', { ...base1, customer_id: cus1, items: [{ product_id: pB.id, qty: 1 }] })).code, 201); auto++; ok('pelanggan toko lain boleh dipakai di faktur');
   assert.equal((await K.post('/api/invoices', base1)).code, 403); ok('kasir tidak bisa buat penjualan faktur');
-  const lst = await A.get('/api/sales?kind=FAKTUR&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, auto); assert.equal((await A.get('/api/sales?kind=SP&from=2020-01-01&to=2030-01-01')).total, 8); assert.equal((await A.get('/api/sales?kind=INAPROC&from=2020-01-01&to=2030-01-01')).total, 5); ok('daftar penjualan faktur + filter jenis');
+  const lst = await A.get('/api/sales?kind=FAKTUR&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, auto); assert.equal((await A.get('/api/sales?kind=SP&from=2020-01-01&to=2030-01-01')).total, 7); assert.equal((await A.get('/api/sales?kind=INAPROC&from=2020-01-01&to=2030-01-01')).total, 7); ok('daftar penjualan faktur + filter jenis');
   const pay = await A.post(`/api/sales/${i1.id}/payments`, { amount: 1000000, method: 'TRANSFER' }); assert.equal(pay.outstanding, 3300000); ok('faktur: cicilan piutang lewat menu yang sama');
   const rcv = await A.get('/api/reports/receivables'); assert.equal(rcv.rows.some((r) => r.sale_no === i1.sale_no), true); ok('faktur masuk laporan piutang');
   const rep = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rep.rows[0] && rep.rows[0].total >= 4300000); ok('faktur masuk laporan penjualan (tanggal dokumen)');
   // ---- laporan: PPN, PPH, HPP, laba (harga dasar saat transaksi tersimpan)
   const rd = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08');
-  assert.ok(['tax', 'pph', 'hpp', 'profit'].every((k) => rd.cols.some((c) => c.key === k)));
-  const rr = rd.rows.find((x) => x.sale_no === pp1.sale_no); assert.deepEqual([rr.tax, rr.pph, rr.hpp, rr.profit], [15180, 2070, 100000, 38000]);
-  const rr2 = rd.rows.find((x) => x.sale_no === pp2.sale_no); assert.deepEqual([rr2.tax, rr2.pph, rr2.hpp, rr2.profit], [1518, 207, 10000, 3800]);
+  assert.ok(['tax', 'pph', 'hpp', 'profit', 'pay_type'].every((k) => rd.cols.some((c) => c.key === k))); assert.ok(rd.cols.some((c) => c.key === 'contract_no') && !rd.cols.some((c) => c.key === 'sale_no')); // toko AJS: hanya No. SP
+  const rr = rd.rows.find((x) => x.sale_no === pp1.sale_no); assert.deepEqual([rr.tax, rr.pph, rr.hpp, rr.profit], [15180, 0, 100000, 38000]);
+  const rr2 = rd.rows.find((x) => x.sale_no === pp2.sale_no); assert.deepEqual([rr2.tax, rr2.pph, rr2.hpp, rr2.profit], [1539, 210, 10000, 3776]); assert.equal(rr2.pay_type, 'LS');
   ok('laporan transaksi: PPN, PPH, HPP, dan laba (total - PPN - PPH - HPP)');
   await A.put('/api/products/' + pB.id, { buy_price: 12000 });
   const rd2 = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); assert.equal(rd2.rows.find((x) => x.sale_no === pp1.sale_no).profit, 38000); assert.equal(rd2.rows.find((x) => x.sale_no === pp1.sale_no).hpp, 100000);
   await A.put('/api/products/' + pB.id, { buy_price: 10000 }); ok('laba transaksi lama tidak berubah saat harga dasar barang diubah');
-  const rdd = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rdd.rows[0].pph >= 2277 && rdd.rows[0].tax >= 16698 && typeof rdd.rows[0].profit === 'number' && rdd.cols.some((c) => c.key === 'hpp')); ok('laporan harian: PPN, PPH, HPP, laba');
+  const rdd = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rdd.rows[0].pph > 0 && rdd.rows[0].tax >= 16698 && typeof rdd.rows[0].profit === 'number' && rdd.cols.some((c) => c.key === 'hpp')); ok('laporan harian: PPN, PPH, HPP, laba');
   assert.ok((await A.get('/api/reports/sales_items?from=2026-10-08&to=2026-10-08')).rows.length > 0); assert.equal((await A.get('/api/reports/sales_detail/excel?from=2026-10-08&to=2026-10-08', true)).status, 200); ok('laporan per barang & Excel laporan transaksi');
   const sBefore = await stockOf(pB.id); const v = await A.post(`/api/sales/${i2.id}/void`, { reason: 'uji' }); assert.equal(v.status, 'VOID'); assert.equal(await stockOf(pB.id), sBefore + 1); ok('batal faktur mengembalikan stok');
   // ---- ubah & hapus penjualan faktur
@@ -163,9 +168,9 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const ed3 = await A.put('/api/invoices/' + ed1.id, { ...base1, type: 'SP', items: [{ product_id: pB.id, qty: 6 }, { product_id: pB2.id, qty: 1 }] });
   assert.equal(ed3.items[0].cost, 10000); assert.equal(ed3.items[0].price, 13800); assert.equal(ed3.items[1].cost, pB2buy); assert.equal(ed3.items[1].price, 19000); assert.equal(await stockOf(pB.id), e0 - 6);
   ok('ubah faktur: baris lama tetap memakai harga dasar & harga SP saat itu, baris baru memakai harga sekarang');
-  const ed4 = await A.put('/api/invoices/' + ed1.id, { ...base1, type: 'LANGSUNG', items: [{ product_id: pB.id, qty: 6 }, { product_id: pB2.id, qty: 1 }], pph_mode: 'EXCLUDE', pph_rate: 1.5 });
-  assert.equal(ed4.kind, 'LANGSUNG'); assert.equal(ed4.items[0].price, 13000); assert.equal(ed4.items[1].price, 19550); assert.equal(ed4.items[0].cost, 10000); assert.equal(ed4.subtotal, 97550); assert.equal(ed4.pph, 1463.25); assert.equal(ed4.total, 99013.25);
-  await A.put('/api/products/' + pB.id, { buy_price: 10000, price_sp: 13800 }); ok('ubah jenis penjualan: harga mengikuti jenis baru; PPH ikut dihitung');
+  const ed4 = await A.put('/api/invoices/' + ed1.id, { ...base1, type: 'LANGSUNG', items: [{ product_id: pB.id, qty: 6 }, { product_id: pB2.id, qty: 1 }]});
+  assert.equal(ed4.kind, 'LANGSUNG'); assert.equal(ed4.items[0].price, 13000); assert.equal(ed4.items[1].price, 19550); assert.equal(ed4.items[0].cost, 10000); assert.equal(ed4.subtotal, 97550); assert.equal(ed4.pph, 0); assert.equal(ed4.total, 97550);
+  await A.put('/api/products/' + pB.id, { buy_price: 10000, price_sp: 13800 }); ok('ubah jenis penjualan: harga mengikuti jenis baru; LANGSUNG tidak kena PPH laporan');
   const ed5 = await A.post('/api/invoices', { ...base1, type: 'SP', paid: 20000, method: 'TUNAI', items: [{ product_id: pB.id, qty: 2 }] }); auto++; assert.equal(ed5.code, 201);
   assert.equal((await A.put('/api/invoices/' + ed5.id, { ...base1, type: 'SP', items: [{ product_id: pB.id, qty: 1 }] })).code, 400); assert.equal((await A.get('/api/sales/' + ed5.id)).total, 27600); ok('ubah faktur: total baru tidak boleh di bawah pembayaran yang sudah masuk');
   const ed6 = await A.put('/api/invoices/' + ed5.id, { ...base1, type: 'SP', items: [{ product_id: pB.id, qty: 3 }] }); assert.equal(ed6.total, 41400); assert.equal(ed6.paid, 20000); assert.equal(ed6.method, 'KREDIT'); assert.equal(ed6.outstanding, 21400); ok('ubah faktur: pembayaran tetap, sisa tagihan dihitung ulang');

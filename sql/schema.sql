@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS sales (
   pph_mode VARCHAR(8),
   pph_rate DECIMAL(6,2) NOT NULL DEFAULT 0,
   pph DECIMAL(15,2) NOT NULL DEFAULT 0,
+  pay_type VARCHAR(4),
   spp_to VARCHAR(300),
   created_at {{TS}} NOT NULL,
   user_id BIGINT NOT NULL REFERENCES users(id),

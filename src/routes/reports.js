@@ -4,6 +4,7 @@ const db = require('../db');
 const { auth, owner } = require('../middleware/auth');
 const { wrap, err, range, round2, round3 } = require('../services/util');
 const settings = require('../services/settings');
+const storeRules = require('../services/store-rules');
 
 router.use(auth, owner);
 
@@ -25,10 +26,14 @@ const REPORTS = {
   },
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
-    cols: [C('sale_no', 'No. Transaksi'), C('contract_no', 'No. Pesanan / SP'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    // Kolom nomor mengikuti aturan toko (services/store-rules.js, reportRefs): RN hanya No. Invoice, AJS hanya No. SP.
+    cols: (code) => { const refs = storeRules.reportRefs(code); const both = refs.length > 1; return [
+      ...(refs.includes('invoice') ? [C('sale_no', both ? 'No. Transaksi' : 'No. Invoice')] : []), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'),
+      ...(refs.includes('contract') ? [C('contract_no', both ? 'No. Pesanan / SP' : 'No. SP')] : []), C('pay_type', 'UP / LS'), C('method', 'Metode'), C('status', 'Status'),
+      C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)]; },
     // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {
-      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
+      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.pay_type, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
         (SELECT COALESCE(SUM(i.cost * i.qty), 0) FROM sale_items i WHERE i.sale_id = s.id) AS hpp
         FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.id`, [sid, r.f, r.t]);
       return rows.map((x) => (x.status === 'VOID'
@@ -52,10 +57,12 @@ const REPORTS = {
           rev = l.total / (1 + ri / 100);
         }
         const k = l.product_id + '|' + l.sku + '|' + l.name + '|' + l.unit;
-        const x = g.get(k) || { sku: l.sku, name: l.name, unit: l.unit, qty: 0, gross: 0, revenue: 0, cost: 0 };
-        x.qty += l.qty; x.gross += l.total; x.revenue += rev; x.cost += l.cost * l.qty; g.set(k, x);
+        // PPH (laporan saja, INAPROC) dibagi ke tiap baris sebanding nilainya; faktur lama yang PPH-nya sudah di dalam harga tidak dipotong lagi
+        const pphShare = l.kind !== 'POS' && (!l.pph_mode || l.pph_mode === 'NONE') && l.subtotal > 0 ? l.pph * l.total / l.subtotal : 0;
+        const x = g.get(k) || { sku: l.sku, name: l.name, unit: l.unit, qty: 0, gross: 0, revenue: 0, cost: 0, pph: 0 };
+        x.qty += l.qty; x.gross += l.total; x.revenue += rev; x.cost += l.cost * l.qty; x.pph += pphShare; g.set(k, x);
       }
-      return [...g.values()].sort((a, b) => b.gross - a.gross).map((x) => ({ sku: x.sku, name: x.name, unit: x.unit, qty: round3(x.qty), revenue: round2(x.revenue), cost: round2(x.cost), profit: round2(x.revenue - x.cost) }));
+      return [...g.values()].sort((a, b) => b.gross - a.gross).map((x) => ({ sku: x.sku, name: x.name, unit: x.unit, qty: round3(x.qty), revenue: round2(x.revenue), cost: round2(x.cost), profit: round2(x.revenue - x.cost - x.pph) }));
     },
   },
   sales_cashier: {
@@ -114,33 +121,34 @@ function meta(req) {
   if (!rep) throw err(404, 'Laporan tidak ditemukan');
   return rep;
 }
+const colsOf = (rep, req) => (typeof rep.cols === 'function' ? rep.cols(req.store.code) : rep.cols);
 router.get('/', (req, res) => res.json(Object.entries(REPORTS).map(([id, r]) => ({ id, title: r.title, ranged: !!r.ranged, category: id === 'stock' || id === 'low_stock' }))));
 router.get('/:name', wrap(async (req, res) => {
   const rep = meta(req); const r = range(req.query);
-  res.json({ title: rep.title, cols: rep.cols, rows: await rep.run(req.query, r, req.sid), from: r.from, to: r.to, ranged: !!rep.ranged });
+  res.json({ title: rep.title, cols: colsOf(rep, req), rows: await rep.run(req.query, r, req.sid), from: r.from, to: r.to, ranged: !!rep.ranged });
 }));
 
 router.get('/:name/excel', wrap(async (req, res) => {
-  const rep = meta(req); const r = range(req.query);
+  const rep = meta(req); const r = range(req.query); const cols = colsOf(rep, req);
   const rows = await rep.run(req.query, r, req.sid);
   const s = await settings.get(req.sid);
   const wb = new ExcelJS.Workbook(); wb.creator = s.store_name; wb.created = new Date();
   const ws = wb.addWorksheet(rep.title.slice(0, 30), { views: [{ state: 'frozen', ySplit: 5 }] });
-  const n = rep.cols.length;
+  const n = cols.length;
   ws.addRow([s.store_name]).font = { bold: true, size: 14 };
   ws.addRow([rep.title]).font = { bold: true, size: 12 };
   ws.addRow([rep.ranged ? `Periode: ${r.from} s/d ${r.to}` : `Per tanggal: ${db.today()}`]);
   ws.addRow([`Dicetak: ${db.now()}`]).font = { color: { argb: 'FF787774' } };
-  const head = ws.addRow(rep.cols.map((c) => c.label));
+  const head = ws.addRow(cols.map((c) => c.label));
   head.font = { bold: true }; head.eachCell((c) => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F6F3' } }; c.border = { bottom: { style: 'thin' }, top: { style: 'thin' } }; });
   const fmt = { money: '#,##0', int: '#,##0', qty: '#,##0.###' };
-  rep.cols.forEach((c, i) => { const col = ws.getColumn(i + 1); col.width = Math.max(12, c.label.length + 4); if (fmt[c.type]) col.numFmt = fmt[c.type]; if (fmt[c.type]) col.alignment = { horizontal: 'right' }; });
-  for (const row of rows) ws.addRow(rep.cols.map((c) => row[c.key] ?? null));
+  cols.forEach((c, i) => { const col = ws.getColumn(i + 1); col.width = Math.max(12, c.label.length + 4); if (fmt[c.type]) col.numFmt = fmt[c.type]; if (fmt[c.type]) col.alignment = { horizontal: 'right' }; });
+  for (const row of rows) ws.addRow(cols.map((c) => row[c.key] ?? null));
   // lebar kolom mengikuti isi
-  rep.cols.forEach((c, i) => { let w = c.label.length + 4; for (const row of rows.slice(0, 300)) w = Math.max(w, String(row[c.key] ?? '').length + 2); ws.getColumn(i + 1).width = Math.min(w, 45); });
-  const sums = rep.cols.map((c) => (c.sum ? rows.reduce((a, x) => a + (+x[c.key] || 0), 0) : null));
+  cols.forEach((c, i) => { let w = c.label.length + 4; for (const row of rows.slice(0, 300)) w = Math.max(w, String(row[c.key] ?? '').length + 2); ws.getColumn(i + 1).width = Math.min(w, 45); });
+  const sums = cols.map((c) => (c.sum ? rows.reduce((a, x) => a + (+x[c.key] || 0), 0) : null));
   if (sums.some((x) => x != null)) {
-    const t = ws.addRow(rep.cols.map((c, i) => (i === 0 ? 'TOTAL' : sums[i] == null ? null : round2(sums[i]))));
+    const t = ws.addRow(cols.map((c, i) => (i === 0 ? 'TOTAL' : sums[i] == null ? null : round2(sums[i]))));
     t.font = { bold: true }; t.eachCell((c) => { c.border = { top: { style: 'thin' } }; });
   }
   ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: n } };

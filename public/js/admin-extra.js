@@ -69,13 +69,14 @@
     if (sale) {
       const ps = await Promise.all([...new Set(sale.items.map((i) => i.product_id))].map((id) => POS.get('/api/products/' + id).catch(() => null)));
       const pm = new Map(ps.filter(Boolean).map((p) => [p.id, p]));
-      lines = sale.items.map((i) => { const p = pm.get(i.product_id) || {}; return { product_id: i.product_id, sku: i.sku, name: i.name, unit: i.unit, stock: p.stock || 0, price_ekatalog: p.price_ekatalog || 0, price_sp: p.price_sp || 0, price_langsung: p.price_langsung || 0, qty: i.qty, price: i.price, savedPrice: i.price, edited: true, ppn_on: i.ppn_on !== 0, pph_on: i.pph_on !== 0 }; });
+      lines = sale.items.map((i) => { const p = pm.get(i.product_id) || {}; return { product_id: i.product_id, sku: i.sku, name: i.name, unit: i.unit, stock: p.stock || 0, price_ekatalog: p.price_ekatalog || 0, price_sp: p.price_sp || 0, price_langsung: p.price_langsung || 0, qty: i.qty, price: i.price, savedPrice: i.price, edited: true, ppn_on: i.ppn_on !== 0 }; });
     }
     if (sale && !customers.some((c) => c.id === sale.customer_id)) customers = [...customers, { id: sale.customer_id, name: sale.customer_name }];
     el.innerHTML = A.head(sale ? 'Ubah penjualan ' + sale.sale_no : 'Penjualan Faktur baru', 'Faktur di luar POS. Harga diambil dari harga e-katalog / SP / langsung di master barang (bukan harga jual POS).', '<a href="#/invoices"><button>Kembali</button></a>') + `
       <div class="card"><h3>Jenis penjualan</h3>
         <div class="seg" id="i_type" role="radiogroup" aria-label="Jenis penjualan">${Object.entries({ INAPROC: 'Penjualan INAPROC', SP: 'Penjualan SP', LANGSUNG: 'Penjualan Langsung' }).filter(([k]) => allowed.includes(k) || k === origType).map(([k, v]) => `<button type="button" role="radio" data-t="${k}" aria-checked="${k === type}" class="${k === type ? 'primary' : ''}">${v}</button>`).join('')}</div>
-        <div class="hint" id="i_tinfo" style="margin-top:8px"></div></div>
+        <div class="hint" id="i_tinfo" style="margin-top:8px"></div>
+        <div id="i_paywrap" style="margin-top:12px;max-width:320px"><label class="f">Metode pembayaran instansi</label><select id="i_pay"><option value="LS">LS (Langsung)</option><option value="UP">UP (Uang Persediaan)</option></select><div class="hint">Menentukan tarif PPH di laporan (UP 0,5%, LS 1,5%). Tidak tampil di invoice.</div></div></div>
       <div class="card" style="margin-top:14px"><h3>Pelanggan &amp; dokumen</h3><div class="form-grid">
         <div><label class="f">Pelanggan (perusahaan / instansi) *</label><div style="display:flex;gap:6px"><select id="i_cust"></select><button type="button" class="sm" id="i_newc" style="white-space:nowrap">Baru</button></div></div>
         <div><label class="f">Nomor dokumen</label><input id="i_no" placeholder="otomatis" value="${sale ? esc(sale.sale_no) : ''}"><div class="hint" id="i_nohint"></div></div>
@@ -88,16 +89,14 @@
       <div class="card" style="margin-top:14px"><h3>Pajak, pembayaran &amp; catatan</h3><div class="form-grid">
         <div><label class="f">PPN</label><select id="i_tax">${MODE_OPTS('PPN')}</select></div>
         <div><label class="f">Tarif PPN (%)</label><input id="i_taxr" value="${sale && sale.tax_mode !== 'NONE' ? sale.tax_rate : 11}" inputmode="decimal"></div>
-        <div><label class="f">PPH</label><select id="i_pph">${MODE_OPTS('PPH')}</select></div>
-        <div><label class="f">Tarif PPH (%)</label><input id="i_pphr" value="${sale && sale.pph_mode && sale.pph_mode !== 'NONE' ? sale.pph_rate : 1.5}" inputmode="decimal"></div>
-        <div class="span2 hint" style="margin-top:-6px">PPN dan PPH dihitung dari harga sebelum pajak, hanya untuk baris yang dicentang (cabut centang untuk barang yang tidak kena pajak). "Sudah termasuk" berarti pajak sudah ada di dalam harga satuan; "ditambahkan" berarti menambah total.</div>
+        <div class="span2 hint" style="margin-top:-6px">PPN dihitung dari harga sebelum pajak, hanya untuk baris yang dicentang (cabut centang untuk barang yang tidak kena PPN). "Sudah termasuk" berarti PPN sudah ada di dalam harga satuan; "ditambahkan" berarti menambah total. Hasil dibulatkan ke atas ke rupiah penuh.</div>
         ${sale ? `<div class="span2"><div class="muted" style="font-size:12px">Sudah dibayar</div><div class="mono">${money(sale.paid)}</div><div class="hint">Pembayaran diubah lewat tombol Terima pembayaran di detail transaksi.</div></div>`
     : `<div><label class="f">Dibayar di muka (Rp)</label><input id="i_paid" value="0" inputmode="decimal"><div class="hint">0 = belum dibayar, otomatis tercatat sebagai piutang.</div></div>
         <div><label class="f">Metode pembayaran</label><select id="i_method">${Object.entries(POS.METHOD).filter(([k]) => k !== 'KREDIT').map(([k, v]) => `<option value="${k}" ${k === 'TRANSFER' ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>`}
         <div class="span2"><label class="f">Catatan</label><input id="i_note" value="${sale ? esc(sale.note || '') : ''}"></div>
       </div><div id="i_tot" style="margin-top:14px"></div><div id="i_err" class="err hidden"></div></div>
       <div class="sticky-save"><button class="primary" id="i_save">${sale ? 'Simpan perubahan' : 'Simpan penjualan'} <kbd>Ctrl+S</kbd></button></div>`;
-    if (sale) { $('#i_tax', el).value = sale.tax_mode || 'NONE'; $('#i_pph', el).value = sale.pph_mode || 'NONE'; }
+    if (sale) { $('#i_tax', el).value = sale.tax_mode || 'NONE'; if (sale.pay_type) $('#i_pay', el).value = sale.pay_type; }
 
     const drawCust = (sel) => { $('#i_cust', el).innerHTML = '<option value="">- pilih -</option>' + customers.map((c) => `<option value="${c.id}" ${String(c.id) === String(sel) ? 'selected' : ''}>${esc(c.name)}</option>`).join(''); };
     drawCust(sale ? sale.customer_id : '');
@@ -120,25 +119,25 @@
     const refPrice = (l) => (sale && type === origType && l.savedPrice != null ? l.savedPrice : num(l[PRICE_KEY[type]]));
     function draw() {
       const ed = editable();
-      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang</th><th style="width:84px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:140px">${PRICE_NAME[type]}</th><th class="r" style="width:130px">Jumlah</th><th class="c" style="width:48px" title="Kena PPN">PPN</th><th class="c" style="width:48px" title="Kena PPH">PPH</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td>${ed ? `<input data-k="name" value="${esc(l.name)}">` : esc(l.name)}${refPrice(l) > 0 ? '' : `<div class="hint" style="color:var(--red)">${PRICE_NAME[type]} belum diisi di master barang</div>`}<div class="muted" style="font-size:11.5px">${esc(l.sku)} &middot; stok ${nf(l.stock)}</div></td><td>${ed ? `<input data-k="unit" value="${esc(l.unit)}">` : esc(l.unit)}</td><td><input class="r mono" data-k="qty" value="${esc(l.qty)}" inputmode="decimal"></td><td class="r">${ed ? `<input class="r mono" data-k="price" value="${esc(l.price)}" inputmode="decimal">${num(l.price) !== refPrice(l) ? `<div class="muted" style="font-size:11.5px">e-katalog ${money(refPrice(l))}</div>` : ''}` : `<span class="mono">${money(l.price)}</span>`}</td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td class="c"><input type="checkbox" data-k="ppn" ${l.ppn_on ? 'checked' : ''} title="Kena PPN"></td><td class="c"><input type="checkbox" data-k="pph" ${l.pph_on ? 'checked' : ''} title="Kena PPH"></td><td><button class="sm danger" data-del title="Hapus baris">&times;</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted center" style="padding:18px">Belum ada barang. Tekan Insert atau klik Tambah barang.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
+      itemsEl.innerHTML = `<table class="t items"><thead><tr><th>Nama barang</th><th style="width:84px">Satuan</th><th class="r" style="width:90px">Qty</th><th class="r" style="width:140px">${PRICE_NAME[type]}</th><th class="r" style="width:130px">Jumlah</th><th class="c" style="width:48px" title="Kena PPN">PPN</th><th style="width:44px"></th></tr></thead><tbody>${lines.map((l, n) => `<tr data-n="${n}"><td>${ed ? `<input data-k="name" value="${esc(l.name)}">` : esc(l.name)}${refPrice(l) > 0 ? '' : `<div class="hint" style="color:var(--red)">${PRICE_NAME[type]} belum diisi di master barang</div>`}<div class="muted" style="font-size:11.5px">${esc(l.sku)} &middot; stok ${nf(l.stock)}</div></td><td>${ed ? `<input data-k="unit" value="${esc(l.unit)}">` : esc(l.unit)}</td><td><input class="r mono" data-k="qty" value="${esc(l.qty)}" inputmode="decimal"></td><td class="r">${ed ? `<input class="r mono" data-k="price" value="${esc(l.price)}" inputmode="decimal">${num(l.price) !== refPrice(l) ? `<div class="muted" style="font-size:11.5px">e-katalog ${money(refPrice(l))}</div>` : ''}` : `<span class="mono">${money(l.price)}</span>`}</td><td class="r mono" data-lt>${money(lineTotal(l))}</td><td class="c"><input type="checkbox" data-k="ppn" ${l.ppn_on ? 'checked' : ''} title="Kena PPN"></td><td><button class="sm danger" data-del title="Hapus baris">&times;</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted center" style="padding:18px">Belum ada barang. Tekan Insert atau klik Tambah barang.</td></tr>'}</tbody></table><div style="margin-top:10px"><button data-add>Tambah barang <kbd>Insert</kbd></button></div>`;
       tot();
     }
     async function add() {
       const p = await A.pickProduct(); if (!p) return;
       const ex = lines.find((l) => l.product_id === p.id);
-      if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, price_ekatalog: p.price_ekatalog, price_sp: p.price_sp, price_langsung: p.price_langsung, qty: 1, edited: false, ppn_on: !p.no_ppn, pph_on: !p.no_pph }; l.price = num(l[PRICE_KEY[type]]); lines.push(l); }
+      if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, price_ekatalog: p.price_ekatalog, price_sp: p.price_sp, price_langsung: p.price_langsung, qty: 1, edited: false, ppn_on: !p.no_ppn }; l.price = num(l[PRICE_KEY[type]]); lines.push(l); }
       draw();
     }
     itemsEl.addEventListener('click', (e) => { if (e.target.closest('[data-add]')) add(); const d = e.target.closest('[data-del]'); if (d) { lines.splice(+d.closest('tr').dataset.n, 1); draw(); } });
     // ubah di tempat: jangan menggambar ulang tabel agar fokus keyboard tidak hilang saat pindah kolom
-    itemsEl.addEventListener('input', (e) => { const k = e.target.dataset.k; if (!k) return; const tr = e.target.closest('tr'); const l = lines[+tr.dataset.n]; if (k === 'ppn' || k === 'pph') { l[k + '_on'] = e.target.checked; tot(); return; } l[k] = e.target.value; if (k === 'price') l.edited = true; tr.querySelector('[data-lt]').textContent = money(lineTotal(l)); tot(); });
+    itemsEl.addEventListener('input', (e) => { const k = e.target.dataset.k; if (!k) return; const tr = e.target.closest('tr'); const l = lines[+tr.dataset.n]; if (k === 'ppn') { l.ppn_on = e.target.checked; tot(); return; } l[k] = e.target.value; if (k === 'price') l.edited = true; tr.querySelector('[data-lt]').textContent = money(lineTotal(l)); tot(); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Insert') { e.preventDefault(); add(); } });
 
     // ----- jenis penjualan: hanya memengaruhi harga -----
     function setType(t) {
       type = t;
       $$('#i_type button', el).forEach((b) => { const on = b.dataset.t === t; b.setAttribute('aria-checked', String(on)); b.classList.toggle('primary', on); });
-      $('#i_tinfo', el).textContent = TYPE_INFO[t];
+      $('#i_tinfo', el).textContent = TYPE_INFO[t]; $('#i_paywrap', el).style.display = t === 'INAPROC' ? '' : 'none';
       for (const l of lines) { if (t !== 'INAPROC') l.edited = false; if (!l.edited || (sale && t === origType)) l.price = refPrice(l); }
       draw();
     }
@@ -146,25 +145,26 @@
 
     // ----- ringkasan (rumus sama dengan server) -----
     function calc() {
-      const pm = $('#i_tax', el).value; const hm = $('#i_pph', el).value; const pr = num($('#i_taxr', el).value); const hr = num($('#i_pphr', el).value);
-      let sub = 0; let ppn = 0; let pph = 0;
-      for (const l of lines) { // sama dengan server: DPP per baris, pajak hanya untuk baris yang dicentang
+      const pm = $('#i_tax', el).value; const pr = num($('#i_taxr', el).value);
+      const up = (x) => Math.ceil(Math.round(x * 1e6) / 1e6); // bulatkan ke atas, sama dengan server
+      let sub = 0; let ppn = 0;
+      for (const l of lines) { // DPP per baris, PPN hanya untuk baris yang dicentang
         const t = lineTotal(l); sub += t;
-        const onN = pm !== 'NONE' && l.ppn_on; const onH = hm !== 'NONE' && l.pph_on;
-        const dpp = t / (1 + ((onN && pm === 'INCLUDE' ? pr : 0) + (onH && hm === 'INCLUDE' ? hr : 0)) / 100);
-        if (onN) ppn += dpp * pr / 100; if (onH) pph += dpp * hr / 100;
+        const onN = pm !== 'NONE' && l.ppn_on;
+        const dpp = t / (onN && pm === 'INCLUDE' ? 1 + pr / 100 : 1);
+        if (onN) ppn += dpp * pr / 100;
       }
-      sub = r2(sub); const tax = r2(ppn); const pphv = r2(pph);
-      const total = r2(sub + (pm === 'EXCLUDE' ? tax : 0) + (hm === 'EXCLUDE' ? pphv : 0));
-      return { subtotal: sub, tax, pph: pphv, total, paid: sale ? sale.paid : num($('#i_paid', el).value), pm, hm, pr, hr, taxLabel: `PPN ${pr}%${pm === 'INCLUDE' ? ' (termasuk)' : ''}`, pphLabel: `PPH ${hr}%${hm === 'INCLUDE' ? ' (termasuk)' : ''}` };
+      sub = up(sub); const tax = up(ppn);
+      const total = sub + (pm === 'EXCLUDE' ? tax : 0);
+      return { subtotal: sub, tax, total, paid: sale ? sale.paid : num($('#i_paid', el).value), pm, pr, taxLabel: `PPN ${pr}%${pm === 'INCLUDE' ? ' (termasuk)' : ''}` };
     }
     function tot() {
       const c = calc();
-      $('#i_taxr', el).disabled = c.pm === 'NONE'; $('#i_pphr', el).disabled = c.hm === 'NONE';
-      itemsEl.querySelectorAll('input[data-k=ppn]').forEach((x) => { x.disabled = c.pm === 'NONE'; }); itemsEl.querySelectorAll('input[data-k=pph]').forEach((x) => { x.disabled = c.hm === 'NONE'; });
+      $('#i_taxr', el).disabled = c.pm === 'NONE';
+      itemsEl.querySelectorAll('input[data-k=ppn]').forEach((x) => { x.disabled = c.pm === 'NONE'; });
       $('#i_tot', el).innerHTML = A.totalsBox(c) + (c.paid && c.paid < c.total ? `<div class="muted" style="text-align:right;margin-top:6px">Sisa tagihan (piutang): <b class="mono">${money(c.total - c.paid)}</b></div>` : '');
     }
-    ['#i_tax', '#i_taxr', '#i_pph', '#i_pphr', '#i_paid'].forEach((s) => { const n = $(s, el); if (n) { n.addEventListener('input', tot); n.addEventListener('change', tot); } });
+    ['#i_tax', '#i_taxr', '#i_paid'].forEach((s) => { const n = $(s, el); if (n) { n.addEventListener('input', tot); n.addEventListener('change', tot); } });
     setType(type);
 
     async function save() {
@@ -173,8 +173,8 @@
       const body = {
         type, customer_id: $('#i_cust', el).value, doc_no: $('#i_no', el).value.trim(), doc_date: $('#i_date', el).value, due_date: $('#i_due', el).value || null,
         contract_no: $('#i_ctr', el).value.trim(), contract_date: $('#i_ctrd', el).value || null,
-        tax_mode: c.pm, tax_rate: c.pr, pph_mode: c.hm, pph_rate: c.hr, note: $('#i_note', el).value,
-        items: lines.map((l) => ({ product_id: l.product_id, name: l.name, unit: l.unit, qty: num(l.qty), price: type === 'INAPROC' ? num(l.price) : undefined, ppn: l.ppn_on ? 1 : 0, pph: l.pph_on ? 1 : 0 })),
+        tax_mode: c.pm, tax_rate: c.pr, pay_type: type === 'INAPROC' ? $('#i_pay', el).value : null, note: $('#i_note', el).value,
+        items: lines.map((l) => ({ product_id: l.product_id, name: l.name, unit: l.unit, qty: num(l.qty), price: type === 'INAPROC' ? num(l.price) : undefined, ppn: l.ppn_on ? 1 : 0 })),
       };
       if (!sale) { body.paid = c.paid; body.method = $('#i_method', el).value; }
       try {

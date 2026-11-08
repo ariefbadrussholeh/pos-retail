@@ -3,13 +3,19 @@
 // fakturTypes : jenis Penjualan Faktur yang tersedia di toko itu (INAPROC | SP | LANGSUNG).
 //               Jenis lain disembunyikan di form dan ditolak server.
 //
-// Toko yang tidak terdaftar di sini memakai semua jenis.
+// reportRefs  : kolom nomor di laporan "Rincian Transaksi Penjualan". 'invoice' = nomor invoice/transaksi, 'contract' = No. Pesanan / SP.
+//               Bila tidak diisi, kedua kolom tampil.
 //
-// CARA MENGHILANGKAN pembatasan Toko Rizky Nabila (RN): hapus baris `RN: {...}` di bawah ini (atau ganti
-// fakturTypes menjadi ['INAPROC', 'SP', 'LANGSUNG']), lalu restart aplikasi. Tidak ada perubahan data.
+// Toko yang tidak terdaftar di sini memakai semua jenis dan kedua kolom.
+//
+// CARA MENGHILANGKAN: hapus properti yang bersangkutan di baris toko itu (mis. buang `fakturTypes: [...]` atau `reportRefs: [...]`),
+// atau hapus seluruh baris toko, lalu restart aplikasi. Tidak ada perubahan data.
+// Kode toko Ardana = AJS, Rizky Nabila = RN (lihat menu Toko).
 const ALL = ['INAPROC', 'SP', 'LANGSUNG'];
 const RULES = {
-  RN: { fakturTypes: ['LANGSUNG'] },
+  RN: { fakturTypes: ['LANGSUNG'], reportRefs: ['invoice'] },
+  AJS: { reportRefs: ['contract'] },
 };
 const fakturTypes = (code) => (RULES[String(code || '').toUpperCase()] || {}).fakturTypes || ALL;
-module.exports = { fakturTypes, RULES, ALL };
+const reportRefs = (code) => (RULES[String(code || '').toUpperCase()] || {}).reportRefs || ['invoice', 'contract'];
+module.exports = { fakturTypes, reportRefs, RULES, ALL };

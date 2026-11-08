@@ -16,7 +16,8 @@ function fromSale(s) {
   return {
     side: 'sale', kind: s.kind, no: s.sale_no, date: s.doc_date || s.created_at.slice(0, 10), due_date: s.due_date,
     partyLabel: 'Kepada Yth.', party: { name: s.customer_name || 'Pelanggan Umum', address: s.customer_address, phone: s.customer_phone, npwp: s.customer_npwp },
-    contract_no: s.contract_no, contract_date: s.contract_date, spp_to: s.customer_spp_to, tax_mode: s.tax_mode, tax_rate: s.tax_rate, pph: s.pph, pph_mode: s.pph_mode, pph_rate: s.pph_rate,
+    contract_no: s.contract_no, contract_date: s.contract_date, spp_to: s.customer_spp_to, tax_mode: s.tax_mode, tax_rate: s.tax_rate, pph: 0, // PPH tidak pernah dicetak di dokumen (hanya untuk laporan)
+   
     items: s.items, subtotal: s.subtotal, discount: s.discount, tax: s.tax, total: s.total, paid: Math.min(s.paid, s.total),
     titles: { invoice: 'NOTA PENJUALAN' }, sig: SIG.sale,
     meta: [['No. Invoice', s.sale_no], ['Tanggal', null], ['Jatuh Tempo', null], ['Pembayaran', s.method], ['Kasir', s.cashier]],

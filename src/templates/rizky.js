@@ -10,7 +10,7 @@ const LOGO = (() => { try { return fs.readFileSync(path.join(__dirname, 'rizky',
 const C = { green: '#90FA26', dark: '#2E6B00', tint: '#F3FFE3', ink: '#111111', body: '#333333', line: '#B5B5B5', red: '#D61F1F' };
 // Tampilkan baris PPH di invoice? false = PPH tidak dicetak (nilainya tetap masuk total bila PPH "ditambahkan", sebaiknya pakai "sudah termasuk"/tanpa PPH).
 // Untuk menampilkan PPH lagi: ubah menjadi true.
-const SHOW_PPH = true;
+const SHOW_PPH = false;
 const NOTE = '* Barang yang sudah dibeli tidak bisa di tukar atau dikembalikan';
 
 const PW = 595.28; const PH = 841.89; const X0 = 40; const X1 = PW - 40; const W = X1 - X0;

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./index');
 
-const VERSION = 7; // 7 = bebas PPN/PPH per baris nota + per barang; 6 = 6 = harga manual (e-katalog/SP/langsung per barang), PPH; 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
+const VERSION = 8; // 8 = jenis bayar UP/LS (pay_type) untuk PPH laporan; 7 = bebas PPN/PPH per baris nota + per barang; 6 = 6 = harga manual (e-katalog/SP/langsung per barang), PPH; 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
 const INDEXES = [
   'CREATE INDEX idx_products_barcode ON products(barcode)',
   'CREATE INDEX idx_products_name ON products(name)',
@@ -50,6 +50,7 @@ const ADD_COLS = [
   ['sales', 'pph_mode', 'VARCHAR(8)'],
   ['sales', 'pph_rate', 'DECIMAL(6,2) NOT NULL DEFAULT 0'],
   ['sales', 'pph', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
+  ['sales', 'pay_type', 'VARCHAR(4)'],
   ['products', 'price_ekatalog', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
   ['products', 'price_sp', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
   ['products', 'price_langsung', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
