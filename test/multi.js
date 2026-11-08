@@ -100,6 +100,32 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const pp3 = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', tax_mode: 'INCLUDE', tax_rate: 11, pph_mode: 'EXCLUDE', pph_rate: 1.5, items: [{ product_id: pB2.id, qty: 1 }] }); auto++;
   assert.deepEqual([pp3.tax, pp3.pph, pp3.total], [1937.39, 264.19, 19814.19]); ok('PPN termasuk + PPH ditambahkan');
   assert.equal((await A.post('/api/invoices', { ...base1, pph_mode: 'ZZZ' })).code, 400); assert.equal((await A.post('/api/invoices', { ...base1, pph_mode: 'EXCLUDE', pph_rate: 101 })).code, 400); assert.equal((await A.post('/api/invoices', { ...base1, tax_mode: 'KOSONG' })).code, 400); ok('mode & tarif pajak divalidasi');
+  // ---- barang tidak kena pajak dalam satu nota (centang per baris) + default dari master barang
+  const mx1 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 10 }, { product_id: pB2.id, qty: 1, ppn: 0 }] }); auto++;
+  assert.deepEqual([mx1.subtotal, mx1.tax, mx1.total], [157000, 15180, 172180]); assert.deepEqual(mx1.items.map((x) => x.ppn_on), [1, 0]); ok('PPN ditambahkan hanya untuk baris yang kena PPN');
+  const mx2 = await A.post('/api/invoices', { ...base1, ...INC, items: [{ product_id: pB.id, qty: 1 }, { product_id: pB2.id, qty: 1, price: 20000, ppn: 0 }] }); auto++;
+  assert.deepEqual([mx2.subtotal, mx2.tax, mx2.total], [35525, 1538.51, 35525]); ok('PPN sudah termasuk: baris bebas PPN tidak dipecah');
+  const mx3 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, pph_mode: 'EXCLUDE', pph_rate: 1.5, items: [{ product_id: pB.id, qty: 10, pph: 0 }, { product_id: pB2.id, qty: 1, ppn: 0 }] }); auto++;
+  assert.deepEqual([mx3.tax, mx3.pph, mx3.total], [15180, 285, 172465]); ok('PPN dan PPH dicentang berbeda per baris');
+  await A.put('/api/products/' + pB2.id, { no_ppn: true }); assert.equal((await A.get('/api/products/' + pB2.id)).no_ppn, 1);
+  A.h['x-store'] = '1'; assert.equal((await A.get('/api/products?q=Plastik Hitam 90x120')).rows[0].no_ppn, 1); A.h['x-store'] = String(B); // bebas pajak = data bersama
+  const mx4 = await A.post('/api/invoices', { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 10 }, { product_id: pB2.id, qty: 1 }] }); auto++;
+  assert.deepEqual(mx4.items.map((x) => x.ppn_on), [1, 0]); assert.equal(mx4.tax, 15180); ok('default centang mengikuti master barang (bebas PPN), bersama semua toko');
+  const mx5 = await A.put('/api/invoices/' + mx4.id, { ...base1, type: 'SP', tax_mode: 'EXCLUDE', tax_rate: 11, items: [{ product_id: pB.id, qty: 10, ppn: 0 }, { product_id: pB2.id, qty: 1, ppn: 1 }] });
+  assert.deepEqual(mx5.items.map((x) => x.ppn_on), [0, 1]); assert.equal(mx5.tax, 2090); assert.equal(mx5.total, 157000 + 2090); ok('ubah faktur: centang pajak per baris tersimpan');
+  await A.put('/api/products/' + pB2.id, { no_ppn: false });
+  const rdx = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); const rrx = rdx.rows.find((x) => x.sale_no === mx1.sale_no);
+  assert.ok(rdx.cols.some((c) => c.key === 'contract_no')); assert.equal(rrx.contract_no, '440/1/KTR/2026'); assert.equal(rrx.profit, 172180 - 15180 - (10 * 10000 + (await A.get('/api/products/' + pB2.id)).buy_price)); ok('laporan transaksi: kolom No. Pesanan / SP; laba bersih dengan baris bebas pajak');
+  const ri = (await A.get('/api/reports/sales_items?from=2026-10-08&to=2026-10-08')).rows; assert.ok(ri.every((r) => typeof r.profit === 'number')); ok('laporan per barang: DPP per baris');
+  // ---- aturan toko hardcode (services/store-rules.js): kode RN hanya Penjualan Langsung
+  const stRN = await A.post('/api/stores', { code: 'RN', name: 'Toko Rizky Nabila' }); assert.equal(stRN.code, 201);
+  A.h['x-store'] = String(stRN.id);
+  assert.deepEqual((await A.get('/api/settings')).faktur_types, ['LANGSUNG']); assert.deepEqual((await A.put('/api/settings', { address: 'x' })).faktur_types, ['LANGSUNG']);
+  const prRN = (await A.get('/api/products?q=Plastik Bening 15x33')).rows[0];
+  for (const tp of ['INAPROC', 'SP']) assert.equal((await A.post('/api/invoices', { ...base1, type: tp, items: [{ product_id: prRN.id, qty: 1 }] })).code, 400);
+  assert.equal((await A.post('/api/invoices', { ...base1, items: [{ product_id: prRN.id, qty: 1 }], type: undefined })).code, 201);
+  const lgRN = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', items: [{ product_id: prRN.id, qty: 1 }] }); assert.equal(lgRN.code, 201); assert.equal(lgRN.kind, 'LANGSUNG');
+  A.h['x-store'] = String(B); assert.deepEqual((await A.get('/api/settings')).faktur_types, ['INAPROC', 'SP', 'LANGSUNG']); ok('toko RN: hanya Penjualan Langsung (jenis lain ditolak server, form menerima daftar jenis); toko lain bebas');
   assert.equal((await A.post('/api/invoices', { ...base1, type: 'XYZ' })).code, 400); ok('jenis penjualan divalidasi');
   assert.equal((await A.post('/api/invoices', { ...base1, doc_no: i2.sale_no })).code, 409); ok('nomor dokumen dobel ditolak');
   assert.equal((await A.post('/api/invoices', { ...base1, customer_id: '' })).code, 400); ok('faktur wajib pelanggan');
@@ -108,7 +134,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await A.post('/api/suppliers', { name: 'Pemasok bersama' })).code, 201); A.h['x-store'] = '1'; assert.equal((await A.get('/api/suppliers?q=bersama')).total, 1); A.h['x-store'] = String(B); ok('pemasok milik bersama');
   assert.equal((await A.post('/api/invoices', { ...base1, customer_id: cus1, items: [{ product_id: pB.id, qty: 1 }] })).code, 201); auto++; ok('pelanggan toko lain boleh dipakai di faktur');
   assert.equal((await K.post('/api/invoices', base1)).code, 403); ok('kasir tidak bisa buat penjualan faktur');
-  const lst = await A.get('/api/sales?kind=FAKTUR&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, auto); assert.equal((await A.get('/api/sales?kind=SP&from=2020-01-01&to=2030-01-01')).total, 5); assert.equal((await A.get('/api/sales?kind=INAPROC&from=2020-01-01&to=2030-01-01')).total, 4); ok('daftar penjualan faktur + filter jenis');
+  const lst = await A.get('/api/sales?kind=FAKTUR&from=2020-01-01&to=2030-01-01'); assert.equal(lst.total, auto); assert.equal((await A.get('/api/sales?kind=SP&from=2020-01-01&to=2030-01-01')).total, 8); assert.equal((await A.get('/api/sales?kind=INAPROC&from=2020-01-01&to=2030-01-01')).total, 5); ok('daftar penjualan faktur + filter jenis');
   const pay = await A.post(`/api/sales/${i1.id}/payments`, { amount: 1000000, method: 'TRANSFER' }); assert.equal(pay.outstanding, 3300000); ok('faktur: cicilan piutang lewat menu yang sama');
   const rcv = await A.get('/api/reports/receivables'); assert.equal(rcv.rows.some((r) => r.sale_no === i1.sale_no), true); ok('faktur masuk laporan piutang');
   const rep = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rep.rows[0] && rep.rows[0].total >= 4300000); ok('faktur masuk laporan penjualan (tanggal dokumen)');
@@ -195,7 +221,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
 
   // ---- backup & restore
   const bk = await A.get('/api/backup', true); assert.equal(bk.status, 200); const gz = Buffer.from(await bk.arrayBuffer());
-  const data = JSON.parse(zlib.gunzipSync(gz).toString()); assert.equal(data.app, 'pos-retail'); assert.ok(data.tables.sales.length >= 5 && data.tables.stores.length === 2 && data.tables.sale_docs.length === 2); ok('backup berisi semua toko (.json.gz)');
+  const data = JSON.parse(zlib.gunzipSync(gz).toString()); assert.equal(data.app, 'pos-retail'); assert.ok(data.tables.sales.length >= 5 && data.tables.stores.length === 3 && data.tables.sale_docs.length === 2); ok('backup berisi semua toko (.json.gz)');
   assert.equal((await K.get('/api/backup', true)).status, 403); ok('kasir tidak bisa backup');
   const nBefore = (await db.one('SELECT COUNT(*) AS n FROM sales')).n; const sOwnerBefore = (await db.one('SELECT COUNT(*) AS n FROM products')).n;
   await A.post('/api/products', { name: 'Barang setelah backup', stock: 1 });

@@ -31,7 +31,7 @@ const hex = (c, d) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : d);
 function taxLabel(s, d) {
   const rate = d.tax_rate || s.tax_percent || 0;
   const incl = d.tax_mode ? d.tax_mode === 'INCLUDE' : s.tax_inclusive;
-  return `${s.tax_label || 'PPN'}${rate ? ' ' + rate + '%' : ''}${incl ? ' (termasuk)' : ''}`;
+  return `${s.tax_label || 'PPN'}${rate ? ' ' + rate + '%' : ''}`; // kata "(termasuk)" tidak dicetak
 }
 // Baris referensi tambahan (No. Kontrak / SP) bila ada
 function refRows(d) {
@@ -40,5 +40,9 @@ function refRows(d) {
   return r;
 }
 // Nama PPH untuk ringkasan: "PPH 1.5%" / "PPH 1.5% (termasuk)"
-function pphLabel(d) { return `PPH${d.pph_rate ? ' ' + d.pph_rate + '%' : ''}${d.pph_mode === 'INCLUDE' ? ' (termasuk)' : ''}`; }
-module.exports = { pphLabel, F, BULAN, rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows };
+function pphLabel(d) { return `PPH${d.pph_rate ? ' ' + d.pph_rate + '%' : ''}`; }
+// Barang bebas PPN pada nota yang memakai PPN (baris diberi tanda *) + keterangan kaki
+const exemptPpn = (d, i) => !!d.tax_mode && d.tax_mode !== 'NONE' && i.ppn_on === 0;
+const markName = (d, i) => i.name + (exemptPpn(d, i) ? ' *' : '');
+const exemptNote = (d) => (d.items.some((i) => exemptPpn(d, i)) ? '* Barang bebas PPN' : '');
+module.exports = { exemptPpn, markName, exemptNote, pphLabel, F, BULAN, rp, num, qtyf, tgl, terbilang, hex, taxLabel, refRows };

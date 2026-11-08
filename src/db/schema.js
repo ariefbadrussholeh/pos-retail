@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./index');
 
-const VERSION = 6; // 6 = harga manual (e-katalog/SP/langsung per barang), PPH; 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
+const VERSION = 7; // 7 = bebas PPN/PPH per baris nota + per barang; 6 = 6 = harga manual (e-katalog/SP/langsung per barang), PPH; 3 = multi toko; 4 = pelanggan/pemasok bersama, dokumen; 5 = barang & kategori bersama, jenis penjualan
 const INDEXES = [
   'CREATE INDEX idx_products_barcode ON products(barcode)',
   'CREATE INDEX idx_products_name ON products(name)',
@@ -53,6 +53,10 @@ const ADD_COLS = [
   ['products', 'price_ekatalog', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
   ['products', 'price_sp', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
   ['products', 'price_langsung', 'DECIMAL(15,2) NOT NULL DEFAULT 0'],
+  ['products', 'no_ppn', 'SMALLINT NOT NULL DEFAULT 0'],
+  ['products', 'no_pph', 'SMALLINT NOT NULL DEFAULT 0'],
+  ['sale_items', 'ppn_on', 'SMALLINT NOT NULL DEFAULT 1'],
+  ['sale_items', 'pph_on', 'SMALLINT NOT NULL DEFAULT 1'],
 ];
 // kolom UNIQUE lama (global) yang diganti unik per toko
 const OLD_UNIQUE = [['categories', 'name'], ['products', 'sku'], ['sales', 'sale_no'], ['purchases', 'po_no'], ['goods_receipts', 'gr_no'], ['opnames', 'opname_no']];

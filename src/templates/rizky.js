@@ -4,10 +4,13 @@
 // Tampilan tetap (logo di ./rizky, warna di konstanta C). Nama, alamat, telepon, rekening, dan penandatangan diambil dari Pengaturan toko.
 const fs = require('fs');
 const path = require('path');
-const { num, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows } = require('./util');
+const { num, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows, markName, exemptNote } = require('./util');
 
 const LOGO = (() => { try { return fs.readFileSync(path.join(__dirname, 'rizky', 'logo.jpg')); } catch (_) { return null; } })();
 const C = { green: '#90FA26', dark: '#2E6B00', tint: '#F3FFE3', ink: '#111111', body: '#333333', line: '#B5B5B5', red: '#D61F1F' };
+// Tampilkan baris PPH di invoice? false = PPH tidak dicetak (nilainya tetap masuk total bila PPH "ditambahkan", sebaiknya pakai "sudah termasuk"/tanpa PPH).
+// Untuk menampilkan PPH lagi: ubah menjadi true.
+const SHOW_PPH = true;
 const NOTE = '* Barang yang sudah dibeli tidak bisa di tukar atau dikembalikan';
 
 const PW = 595.28; const PH = 841.89; const X0 = 40; const X1 = PW - 40; const W = X1 - X0;
@@ -112,16 +115,17 @@ function invoice(doc, s, d) {
   for (const [k, v] of refRows(d)) rows.push([k.replace('No. Kontrak / SP', 'No. SP'), v]);
   y = meta(doc, y, rows) + 4;
   const cols = [{ key: 'n', label: 'NO', w: 32, align: 'center' }, { key: 'name', label: 'NAMA BARANG' }, { key: 'qty', label: 'JUMLAH', w: 70, align: 'center' }, { key: 'price', label: 'HARGA SATUAN', w: 88, align: 'right' }, { key: 'total', label: 'TOTAL', w: 98, align: 'right' }];
-  const items = d.items.map((i, n) => ({ n: n + 1, name: i.name, qty: qtyf(i.qty) + (i.unit ? ' ' + i.unit : ''), price: num(i.price), total: num(i.total) }));
+  const items = d.items.map((i, n) => ({ n: n + 1, name: markName(d, i), qty: qtyf(i.qty) + (i.unit ? ' ' + i.unit : ''), price: num(i.price), total: num(i.total) }));
   y = grid(doc, cols, items, y, 12);
   const list = [];
-  if (d.tax || d.pph) list.push(['SUB TOTAL', d.subtotal]);
+  if (d.tax || (SHOW_PPH && d.pph)) list.push(['SUB TOTAL', d.subtotal]);
   if (d.tax) list.push([taxLabel(s, d).toUpperCase(), d.tax]);
-  if (d.pph) list.push([pphLabel(d).toUpperCase(), d.pph]);
+  if (SHOW_PPH && d.pph) list.push([pphLabel(d).toUpperCase(), d.pph]);
   list.push(['JUMLAH', d.total, true]);
   if (d.paid && d.paid < d.total) { list.push(['DIBAYAR', d.paid]); list.push(['SISA', d.total - d.paid, true]); }
   y = room(doc, y, list.length * 22 + 150);
   y = totals(doc, cols, y, list) + 8;
+  { const en = exemptNote(d); if (en) { doc.font('Helvetica').fontSize(8.5).fillColor(C.body); text(doc, en, X0, y); y += 12; } }
   doc.font('Helvetica-Bold').fontSize(9).fillColor(C.dark); text(doc, 'Terbilang:', X0, y);
   doc.font('Helvetica-Oblique').fontSize(9).fillColor(C.body).text(terbilang(d.total), X0 + 50, y, { width: W - 50 }); y = doc.y + 8;
   if (d.side !== 'purchase') noteBox(doc, X0, y);
@@ -143,7 +147,7 @@ function delivery(doc, s, d) {
   const cols = [{ key: 'n', label: 'NO', w: 32, align: 'center' }, { key: 'name', label: 'NAMA BARANG' }, { key: 'qty', label: 'JUMLAH', w: 70, align: 'center' }, { key: 'unit', label: 'SATUAN', w: 70, align: 'center' }, { key: 'note', label: 'KETERANGAN', w: 120 }];
   y = grid(doc, cols, d.items.map((i, n) => ({ n: n + 1, name: i.name, qty: qtyf(i.qty), unit: i.unit || '', note: '' })), y, 12) + 10;
   doc.font('Helvetica').fontSize(8.5).fillColor(C.body).text('Barang telah diterima dalam keadaan baik dan jumlah sesuai.', X0, y, { width: W });
-  signs(doc, doc.y + 14, [{ label: 'Penerima' }, { label: 'Pengirim' }, { label: 'Hormat Kami', name: s.signer_name || '', title: s.signer_name ? s.signer_title : '' }]);
+  signs(doc, doc.y + 14, [{ label: 'Penerima' }, { label: 'Hormat Kami', name: s.signer_name || '', title: s.signer_name ? s.signer_title : '' }]);
 }
 
 function paymentRequest(doc, s, d) {

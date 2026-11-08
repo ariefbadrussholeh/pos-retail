@@ -86,3 +86,4 @@ dialog.wide { max-width: min(96vw, 900px); }
 button.theme { padding: 5px 7px; }
 @media (prefers-reduced-motion: reduce) { #topbar i { transition: none; } }
 td.r:has(> button.ic) { white-space: nowrap; }
+.t th.c, .t td.c { text-align: center; }

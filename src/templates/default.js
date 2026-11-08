@@ -1,6 +1,6 @@
 // TEMPLATE BAWAAN: Invoice ("Nota Penjualan"), Surat Jalan, Permohonan Pembayaran (penjualan & pembelian).
 // Dipakai semua toko yang belum memilih template lain. Warna & logo: logo dari Pengaturan toko, warna di bawah ini.
-const { rp, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows } = require('./util');
+const { rp, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows, markName, exemptNote } = require('./util');
 const settings = require('../services/settings');
 
 const ACCENT = '#E8710A'; // warna header tabel invoice
@@ -147,11 +147,12 @@ function invoice(doc, s, d, logo) {
   doc.y = Math.max(yEndL, doc.y) + 8; doc.x = M;
 
   const anyDisc = d.items.some((i) => i.discount);
-  const rows = d.items.map((i, n) => ({ n: n + 1, name: i.name, qty: qtyf(i.qty) + ' ' + (i.unit || ''), price: rp(i.price), disc: i.discount ? rp(i.discount) : '-', total: rp(i.total) }));
+  const rows = d.items.map((i, n) => ({ n: n + 1, name: markName(d, i), qty: qtyf(i.qty) + ' ' + (i.unit || ''), price: rp(i.price), disc: i.discount ? rp(i.discount) : '-', total: rp(i.total) }));
   const cols = [{ key: 'n', label: 'NO', w: 30, align: 'center' }, { key: 'name', label: 'NAMA BARANG' }, { key: 'qty', label: 'JUMLAH', w: 70, align: 'center' }, { key: 'price', label: 'HARGA SATUAN', w: 88, align: 'right' }];
   if (anyDisc) cols.push({ key: 'disc', label: 'DISKON', w: 65, align: 'right' });
   cols.push({ key: 'total', label: 'TOTAL', w: 92, align: 'right' });
   table(doc, cols, rows, { accent, grid: true });
+  { const en = exemptNote(d); if (en) doc.font('Helvetica').fontSize(8).fillColor('#555555').text(en, doc.page.margins.left, doc.y + 4, { lineBreak: false }); }
 
   const t = [];
   if (d.tax || d.pph || d.discount) t.push(['Sub Total', rp(d.subtotal)]);

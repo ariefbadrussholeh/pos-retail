@@ -41,8 +41,31 @@
       { name: 'price_langsung', label: 'Harga Langsung', type: 'number', hint: 'Penjualan Langsung (tidak bisa diubah di faktur)' }, { type: 'note', hint: '<div class="hint">Semua harga diisi manual, tidak dihitung otomatis.</div>' },
       { name: 'wholesale_price', label: 'Harga grosir', type: 'number', hint: 'Opsional' }, { name: 'wholesale_min', label: 'Min. qty grosir', type: 'number', hint: 'Harga grosir berlaku mulai qty ini' },
       { name: 'min_stock', label: 'Stok minimum', type: 'number', hint: 'Untuk peringatan stok menipis' },
+      { name: 'no_ppn', label: 'Bebas PPN (di faktur tidak dicentang kena PPN, semua toko)', type: 'checkbox' }, { name: 'no_pph', label: 'Bebas PPH (di faktur tidak dicentang kena PPH, semua toko)', type: 'checkbox' },
       creating ? { name: 'stock', label: 'Stok awal (toko ini)', type: 'number' } : { name: 'active', label: 'Barang aktif (tampil di kasir, semua toko)', type: 'checkbox' },
     ];
+  }
+  // Keterangan laba di bawah tiap input harga jual: selisih terhadap harga dasar (hijau untung, merah minus)
+  function bindProfit(el) {
+    const buy = el.querySelector('#ff_buy_price'); if (!buy) return;
+    const fm = (n) => 'Rp ' + Math.abs(Math.round(n * 100) / 100).toLocaleString('id-ID');
+    const boxes = ['sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price'].map((k) => {
+      const inp = el.querySelector('#ff_' + k); if (!inp) return null;
+      const box = document.createElement('div'); box.className = 'hint pf'; box.style.fontWeight = '600'; inp.parentElement.appendChild(box);
+      return { inp, box };
+    }).filter(Boolean);
+    const draw = () => {
+      const dasar = POS.toNum(buy.value) || 0;
+      for (const { inp, box } of boxes) {
+        const price = POS.toNum(inp.value) || 0;
+        if (!price) { box.textContent = ''; continue; }
+        const d = Math.round((price - dasar) * 100) / 100; const pct = dasar > 0 ? ` (${(d / dasar * 100).toFixed(1).replace('.', ',')}%)` : '';
+        box.textContent = (d >= 0 ? 'Laba ' : 'Minus ') + fm(d) + pct + (dasar > 0 ? '' : ' - harga dasar belum diisi');
+        box.style.color = d >= 0 ? 'var(--green)' : 'var(--red)';
+      }
+    };
+    el.addEventListener('input', (e) => { if (e.target === buy || boxes.some((b) => b.inp === e.target)) draw(); });
+    draw();
   }
   function parseCSV(text) {
     const first = text.split('\n')[0]; const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
@@ -101,7 +124,7 @@
         if (act === 'card') { sessionStorage.setItem('stockcard.product', JSON.stringify({ id: row.id, name: row.name })); location.hash = '#/stockcard'; return; }
         if (act === 'del') { if (await POS.confirm(`Hapus "${row.name}"? Barang yang sudah punya riwayat hanya dinonaktifkan.`, 'Hapus', true)) { const r = await POS.del('/api/products/' + row.id).catch((e) => toast(e.message, 'err')); if (r) { toast(r.deactivated ? 'Barang dinonaktifkan (punya riwayat)' : 'Dihapus', 'ok'); reload(); } } return; }
         const creating = act === 'new';
-        const ok = await A.form({ title: creating ? 'Tambah barang' : 'Ubah barang', wide: true, fields: productFields(cats, creating), values: creating ? { unit: 'pcs' } : row, onSubmit: (v) => { v.category_id = v.category_id || null; return creating ? POS.post('/api/products', v) : POS.put('/api/products/' + row.id, v); } });
+        const ok = await A.form({ title: creating ? 'Tambah barang' : 'Ubah barang', wide: true, fields: productFields(cats, creating), values: creating ? { unit: 'pcs' } : row, onOpen: bindProfit, onSubmit: (v) => { v.category_id = v.category_id || null; return creating ? POS.post('/api/products', v) : POS.put('/api/products/' + row.id, v); } });
         if (ok) { toast('Barang tersimpan', 'ok'); reload(); }
       },
     });

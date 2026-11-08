@@ -2,7 +2,7 @@ const router = require('express').Router();
 const ExcelJS = require('exceljs');
 const db = require('../db');
 const { auth, owner } = require('../middleware/auth');
-const { wrap, err, range, round2 } = require('../services/util');
+const { wrap, err, range, round2, round3 } = require('../services/util');
 const settings = require('../services/settings');
 
 router.use(auth, owner);
@@ -25,10 +25,10 @@ const REPORTS = {
   },
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
-    cols: [C('sale_no', 'No. Transaksi'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    cols: [C('sale_no', 'No. Transaksi'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('contract_no', 'No. Pesanan / SP'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
     // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {
-      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
+      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
         (SELECT COALESCE(SUM(i.cost * i.qty), 0) FROM sale_items i WHERE i.sale_id = s.id) AS hpp
         FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.id`, [sid, r.f, r.t]);
       return rows.map((x) => (x.status === 'VOID'
@@ -39,10 +39,24 @@ const REPORTS = {
   sales_items: {
     title: 'Penjualan per Barang', ranged: true,
     cols: [C('sku', 'SKU'), C('name', 'Nama Barang'), C('unit', 'Satuan'), C('qty', 'Qty', 'qty', true), C('revenue', 'Penjualan (sebelum pajak)', 'money', true), C('cost', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
-    run: (q, r, sid) => db.query(`SELECT i.sku, i.name, i.unit, SUM(i.qty) AS qty, SUM(i.total * CASE WHEN s.subtotal > 0 THEN (s.total - s.tax - s.pph) / s.subtotal ELSE 1 END) AS revenue, SUM(i.cost * i.qty) AS cost,
-      SUM(i.total * CASE WHEN s.subtotal > 0 THEN (s.total - s.tax - s.pph) / s.subtotal ELSE 1 END - i.cost * i.qty) AS profit
-      FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ?
-      GROUP BY i.product_id, i.sku, i.name, i.unit ORDER BY SUM(i.total) DESC`, [sid, r.f, r.t]),
+    // Penjualan sebelum pajak = DPP tiap baris (faktur: sesuai centang kena PPN/PPH per baris; POS: dibagi proporsional)
+    async run(q, r, sid) {
+      const lines = await db.query(`SELECT i.product_id, i.sku, i.name, i.unit, i.qty, i.total, i.cost, i.ppn_on, i.pph_on, s.kind, s.subtotal, s.total AS stotal, s.tax, s.pph, s.tax_mode, s.tax_rate, s.pph_mode, s.pph_rate
+        FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ?`, [sid, r.f, r.t]);
+      const g = new Map();
+      for (const l of lines) {
+        let rev;
+        if (l.kind === 'POS') rev = l.subtotal > 0 ? l.total * (l.stotal - l.tax - l.pph) / l.subtotal : l.total;
+        else {
+          const ri = (l.tax_mode === 'INCLUDE' && l.ppn_on ? l.tax_rate : 0) + (l.pph_mode === 'INCLUDE' && l.pph_on ? l.pph_rate : 0);
+          rev = l.total / (1 + ri / 100);
+        }
+        const k = l.product_id + '|' + l.sku + '|' + l.name + '|' + l.unit;
+        const x = g.get(k) || { sku: l.sku, name: l.name, unit: l.unit, qty: 0, gross: 0, revenue: 0, cost: 0 };
+        x.qty += l.qty; x.gross += l.total; x.revenue += rev; x.cost += l.cost * l.qty; g.set(k, x);
+      }
+      return [...g.values()].sort((a, b) => b.gross - a.gross).map((x) => ({ sku: x.sku, name: x.name, unit: x.unit, qty: round3(x.qty), revenue: round2(x.revenue), cost: round2(x.cost), profit: round2(x.revenue - x.cost) }));
+    },
   },
   sales_cashier: {
     title: 'Penjualan per Kasir', ranged: true,

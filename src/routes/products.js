@@ -8,7 +8,7 @@ const settings = require('../services/settings');
 const catalog = require('../services/catalog');
 const ExcelJS = require('exceljs');
 
-const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.item_id, p.buy_price, p.sell_price, p.price_ekatalog, p.price_sp, p.price_langsung, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active';
+const COLS = 'p.id, p.sku, p.barcode, p.name, p.category_id, c.name AS category, p.unit, p.item_id, p.buy_price, p.sell_price, p.price_ekatalog, p.price_sp, p.price_langsung, p.wholesale_price, p.wholesale_min, p.min_stock, p.stock, p.active, p.no_ppn, p.no_pph';
 const FROM = 'FROM products p LEFT JOIN categories c ON c.id = p.category_id';
 
 // Katalog ringkas untuk layar kasir (difilter di browser agar pencarian instan)
@@ -78,6 +78,7 @@ function clean(b, creating) {
   for (const k of ['buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price']) if (k in b) { d[k] = round2(num(b[k])); if (d[k] < 0) throw err(400, 'Harga tidak boleh negatif'); }
   for (const k of ['wholesale_min', 'min_stock']) if (k in b) d[k] = round3(Math.max(num(b[k]), 0));
   if ('active' in b) d.active = b.active ? 1 : 0;
+  for (const k of ['no_ppn', 'no_pph']) if (k in b) d[k] = b[k] ? 1 : 0;
   if (creating) {
     if (!d.name) throw err(400, 'Nama barang wajib diisi');
     if (!d.unit) d.unit = 'pcs';

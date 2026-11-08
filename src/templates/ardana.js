@@ -3,7 +3,7 @@
 // rekening, dan penandatangan tetap diambil dari Pengaturan toko. Dipilih per toko di Pengaturan > Template dokumen.
 const fs = require('fs');
 const path = require('path');
-const { num, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows } = require('./util');
+const { num, qtyf, tgl, terbilang, taxLabel, pphLabel, refRows, markName, exemptNote } = require('./util');
 
 const A = (f) => fs.readFileSync(path.join(__dirname, 'ardana', f)); // gambar template
 const IMG = { logo: A('logo.png'), header: A('header.png'), footer: A('footer.png'), icon: A('phone.png') };
@@ -117,8 +117,9 @@ function invoice(doc, s, d, imgs) {
   const cols = [{ key: 'n', label: 'No.', w: 30, align: 'center' }, { key: 'name', label: 'Nama Barang' }, { key: 'qty', label: 'Qty', w: 45, align: 'center', shade: true }, { key: 'unit', label: 'Satuan', w: 50, align: 'center' }, { key: 'price', label: 'Harga Satuan', w: 82, align: 'right', shade: true }];
   if (any) cols.push({ key: 'disc', label: 'Diskon', w: 62, align: 'right' });
   cols.push({ key: 'total', label: 'Jumlah', w: 88, align: 'right', shade: !any });
-  const rows = d.items.map((i, n) => ({ n: n + 1, name: i.name, qty: qtyf(i.qty), unit: i.unit || '', price: num(i.price), disc: i.discount ? num(i.discount) : '-', total: num(i.total) }));
+  const rows = d.items.map((i, n) => ({ n: n + 1, name: markName(d, i), qty: qtyf(i.qty), unit: i.unit || '', price: num(i.price), disc: i.discount ? num(i.discount) : '-', total: num(i.total) }));
   y = table(doc, P, cols, rows, Math.max(y + 18, 200)) + 8;
+  { const en = exemptNote(d); if (en) { doc.font('Helvetica').fontSize(8).fillColor(P.body).text(en, X0, y - 4, { lineBreak: false }); y += 10; } }
 
   // ringkasan kanan, detail pembayaran kiri
   const tot = [['Sub Total', d.subtotal]];

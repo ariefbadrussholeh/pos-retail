@@ -14,6 +14,7 @@ const stock = require('../services/stock');
 const settings = require('../services/settings');
 const { formatNo, counterKey } = require('../services/doc-number');
 const { loadSale } = require('./sales');
+const storeRules = require('../services/store-rules');
 
 router.use(auth, owner);
 router.use('/:id(\\d+)/docs', require('./sale-docs'));
@@ -22,15 +23,23 @@ const METHODS = ['TUNAI', 'DEBIT', 'QRIS', 'TRANSFER', 'KREDIT'];
 const MODES = ['NONE', 'INCLUDE', 'EXCLUDE'];
 const PRICE_COL = { INAPROC: 'price_ekatalog', SP: 'price_sp', LANGSUNG: 'price_langsung' };
 
-// PPN & PPH dihitung dari DPP (dasar pengenaan pajak). Bila ada yang "sudah termasuk", DPP = subtotal / (1 + jumlah tarif yang termasuk).
+// PPN & PPH dihitung dari DPP (dasar pengenaan pajak) PER BARIS. Tiap baris punya centang kena PPN (ppn_on) dan kena PPH (pph_on);
+// baris yang tidak dicentang tidak dikenai pajak itu. Pada baris yang "sudah termasuk", DPP = jumlah baris / (1 + jumlah tarif yang termasuk).
 // total = subtotal + pajak yang ditambahkan. Laba = total - ppn - pph - HPP (lihat laporan).
-function calcTax(subtotal, ppnMode, ppnRate, pphMode, pphRate) {
-  const ri = (ppnMode === 'INCLUDE' ? ppnRate : 0) + (pphMode === 'INCLUDE' ? pphRate : 0);
-  const dpp = round2(subtotal / (1 + ri / 100));
-  const tax = ppnMode === 'NONE' ? 0 : round2(dpp * ppnRate / 100);
-  const pph = pphMode === 'NONE' ? 0 : round2(dpp * pphRate / 100);
-  const total = round2(subtotal + (ppnMode === 'EXCLUDE' ? tax : 0) + (pphMode === 'EXCLUDE' ? pph : 0));
-  return { dpp, tax, pph, total };
+function calcTax(lines, ppnMode, ppnRate, pphMode, pphRate) {
+  let subtotal = 0; let ppn = 0; let pph = 0; let dppTotal = 0;
+  for (const l of lines) {
+    subtotal += l.total;
+    const onN = ppnMode !== 'NONE' && l.ppn_on; const onH = pphMode !== 'NONE' && l.pph_on;
+    const ri = (onN && ppnMode === 'INCLUDE' ? ppnRate : 0) + (onH && pphMode === 'INCLUDE' ? pphRate : 0);
+    const dpp = l.total / (1 + ri / 100);
+    dppTotal += dpp;
+    if (onN) ppn += dpp * ppnRate / 100;
+    if (onH) pph += dpp * pphRate / 100;
+  }
+  subtotal = round2(subtotal); const tax = round2(ppn); const pphR = round2(pph);
+  const total = round2(subtotal + (ppnMode === 'EXCLUDE' ? tax : 0) + (pphMode === 'EXCLUDE' ? pphR : 0));
+  return { dpp: round2(dppTotal), tax, pph: pphR, total };
 }
 function readTax(b) {
   const mode = (v, d) => { const m = String(v == null || v === '' ? d : v).toUpperCase(); if (!MODES.includes(m)) throw err(400, 'Mode pajak tidak valid'); return m; };
@@ -47,7 +56,7 @@ async function buildLines(t, sid, type, items, oldCost, oldPrice) {
   if (ids.some((x) => !x)) throw err(400, 'Barang tidak valid');
   const prods = new Map();
   for (const pid of ids) {
-    const p = await t.one('SELECT id, sku, name, unit, buy_price, price_ekatalog, price_sp, price_langsung, active FROM products WHERE id = ? AND store_id = ?', [pid, sid]);
+    const p = await t.one('SELECT id, sku, name, unit, buy_price, price_ekatalog, price_sp, price_langsung, no_ppn, no_pph, active FROM products WHERE id = ? AND store_id = ?', [pid, sid]);
     if (!p) throw err(400, 'Barang tidak ditemukan');
     if (!p.active && !(oldCost && oldCost.has(pid))) throw err(400, `${p.name} nonaktif`);
     prods.set(pid, p);
@@ -65,7 +74,9 @@ async function buildLines(t, sid, type, items, oldCost, oldPrice) {
     } else if (oldPrice && oldPrice.has(p.id)) price = oldPrice.get(p.id); // edit: baris lama SP/Langsung tetap berharga seperti tercatat
     const total = round2(qty * price); subtotal += total;
     const cost = oldCost && oldCost.has(p.id) ? oldCost.get(p.id) : p.buy_price; // harga dasar saat itu
-    lines.push({ p, qty, price, total, name, unit, cost });
+    // centang pajak per baris: dari isian; bila tidak dikirim, mengikuti pengaturan bebas pajak di master barang
+    const flag = (v, free) => (v == null || v === '' ? (free ? 0 : 1) : (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0));
+    lines.push({ p, qty, price, total, name, unit, cost, ppn_on: flag(i.ppn, p.no_ppn), pph_on: flag(i.pph, p.no_pph) });
   }
   return { lines, subtotal: round2(subtotal) };
 }
@@ -77,9 +88,11 @@ router.get('/next-no', wrap(async (req, res) => {
   res.json({ no: formatNo((c ? c.v : 0) + 1, date, req.store.code) });
 }));
 
-function readHead(b) {
-  const type = String(b.type || 'INAPROC').toUpperCase();
+function readHead(b, store, keepType) {
+  const allowed = storeRules.fakturTypes(store.code);
+  const type = String(b.type || allowed[0]).toUpperCase();
   if (!TYPES.includes(type)) throw err(400, 'Jenis penjualan tidak valid');
+  if (!allowed.includes(type) && type !== keepType) throw err(400, 'Jenis penjualan ini tidak tersedia untuk toko ini');
   return {
     type, items: Array.isArray(b.items) ? b.items : [], date: ymd(b.doc_date) || db.today(), tx: readTax(b),
     contract_no: b.contract_no ? String(b.contract_no).trim().slice(0, 80) : null, contract_date: ymd(b.contract_date),
@@ -96,7 +109,7 @@ const dueDefault = (date, days) => { const d = new Date(date + 'T00:00:00'); d.s
 
 router.post('/', wrap(async (req, res) => {
   const b = req.body || {};
-  const h = readHead(b);
+  const h = readHead(b, req.store);
   const cfg = await settings.get(req.sid);
   const payMethod = String(b.method || 'TRANSFER').toUpperCase();
   if (!METHODS.includes(payMethod) || payMethod === 'KREDIT') throw err(400, 'Metode pembayaran tidak valid');
@@ -104,7 +117,7 @@ router.post('/', wrap(async (req, res) => {
   const id = await db.tx(async (t) => {
     const customer_id = await checkCustomer(t, b);
     const { lines, subtotal } = await buildLines(t, req.sid, h.type, h.items, null);
-    const x = calcTax(subtotal, h.tx.ppn_mode, h.tx.ppn_rate, h.tx.pph_mode, h.tx.pph_rate);
+    const x = calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate, h.tx.pph_mode, h.tx.pph_rate);
     const paid = round2(Math.max(num(b.paid), 0));
     if (paid > x.total) throw err(400, 'Pembayaran melebihi total');
     const method = paid >= x.total && x.total > 0 ? payMethod : 'KREDIT';
@@ -132,7 +145,7 @@ router.post('/', wrap(async (req, res) => {
     for (const l of lines.slice().sort((a, c) => a.p.id - c.p.id)) {
       await stock.move(t, { store_id: req.sid, product_id: l.p.id, qty: -l.qty, type: 'SALE', ref_type: 'SALE', ref_id: sid, ref_no: sale_no, note: 'Penjualan ' + h.type, user_id: req.user.id, allowNegative: cfg.allow_negative_stock });
     }
-    for (const l of lines) await t.insert('sale_items', { sale_id: sid, product_id: l.p.id, sku: l.p.sku, name: l.name, unit: l.unit, qty: l.qty, price: l.price, cost: l.cost, discount: 0, total: l.total });
+    for (const l of lines) await t.insert('sale_items', { sale_id: sid, product_id: l.p.id, sku: l.p.sku, name: l.name, unit: l.unit, qty: l.qty, price: l.price, cost: l.cost, discount: 0, total: l.total, ppn_on: l.ppn_on, pph_on: l.pph_on });
     if (paid > 0) await t.insert('payments', { ref_type: 'SALE', ref_id: sid, created_at, amount: paid, method: payMethod, note: paid >= x.total ? 'Lunas' : 'Uang muka', user_id: req.user.id });
     return sid;
   });
@@ -143,7 +156,8 @@ router.post('/', wrap(async (req, res) => {
 // Stok disesuaikan sebesar selisih qty; harga dasar (cost) baris lama dipertahankan.
 router.put('/:id(\\d+)', wrap(async (req, res) => {
   const b = req.body || {};
-  const h = readHead(b);
+  const curRow = await db.one("SELECT kind FROM sales WHERE id = ? AND store_id = ? AND kind <> 'POS'", [req.params.id, req.sid]);
+  const h = readHead(b, req.store, curRow && curRow.kind); // jenis lama boleh dipertahankan walau toko kini dibatasi
   const cfg = await settings.get(req.sid);
   await db.tx(async (t) => {
     const s = await t.one("SELECT * FROM sales WHERE id = ? AND store_id = ? AND kind <> 'POS'", [req.params.id, req.sid]);
@@ -154,7 +168,7 @@ router.put('/:id(\\d+)', wrap(async (req, res) => {
     const oldCost = new Map(); const oldQty = new Map(); const oldPrice = new Map();
     for (const o of old) { if (!oldCost.has(o.product_id)) { oldCost.set(o.product_id, o.cost); oldPrice.set(o.product_id, o.price); } oldQty.set(o.product_id, round3((oldQty.get(o.product_id) || 0) + o.qty)); }
     const { lines, subtotal } = await buildLines(t, req.sid, h.type, h.items, oldCost, h.type === s.kind ? oldPrice : null);
-    const x = calcTax(subtotal, h.tx.ppn_mode, h.tx.ppn_rate, h.tx.pph_mode, h.tx.pph_rate);
+    const x = calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate, h.tx.pph_mode, h.tx.pph_rate);
     if (x.total < s.paid) throw err(400, `Total baru (${x.total}) lebih kecil dari yang sudah dibayar (${s.paid}). Ubah dulu pembayarannya`);
 
     let sale_no = String(b.doc_no || '').trim().slice(0, 30) || s.sale_no;
@@ -169,7 +183,7 @@ router.put('/:id(\\d+)', wrap(async (req, res) => {
       if (delta) await stock.move(t, { store_id: req.sid, product_id: pid, qty: delta, type: 'SALE_EDIT', ref_type: 'SALE', ref_id: s.id, ref_no: sale_no, note: 'Ubah penjualan', user_id: req.user.id, allowNegative: delta > 0 || cfg.allow_negative_stock });
     }
     await t.exec('DELETE FROM sale_items WHERE sale_id = ?', [s.id]);
-    for (const l of lines) await t.insert('sale_items', { sale_id: s.id, product_id: l.p.id, sku: l.p.sku, name: l.name, unit: l.unit, qty: l.qty, price: l.price, cost: l.cost, discount: 0, total: l.total });
+    for (const l of lines) await t.insert('sale_items', { sale_id: s.id, product_id: l.p.id, sku: l.p.sku, name: l.name, unit: l.unit, qty: l.qty, price: l.price, cost: l.cost, discount: 0, total: l.total, ppn_on: l.ppn_on, pph_on: l.pph_on });
 
     let method = s.method;
     if (s.paid >= x.total && x.total > 0) {

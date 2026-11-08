@@ -118,6 +118,8 @@ Tombol **Excel Harga** di menu Barang mengekspor daftar harga dasar, e-katalog, 
 
 Seeder master barang dari Excel: `npm run seed:ecatalog` (89 barang bernama; 11 baris tanpa nama dilewati; satuan awal pcs, stok 0; aman diulang). Harga dihitung sekali oleh seeder lalu disimpan sebagai angka biasa: harga offline = (dasar + akomodasi) + laba per barang menjadi Harga Jual POS, Harga SP, dan Harga Langsung; Harga E-Katalog = harga offline + PPH 1,5% + PPN 11%. Setelah itu semuanya bisa diubah manual.
 
+Di form barang, di bawah tiap input harga jual (POS, E-Katalog, SP, Langsung, grosir) tampil **panduan laba** terhadap harga dasar: hijau "Laba Rp X (Y%)" bila untung, merah "Minus Rp X" bila rugi.
+
 ## Penjualan Faktur (di luar POS)
 
 Tiga jenis, hanya memengaruhi harga:
@@ -128,6 +130,10 @@ Tiga jenis, hanya memengaruhi harga:
 
 **Pajak bebas untuk semua jenis**: PPN dan PPH masing-masing dipilih *Tanpa*, *Ditambahkan ke harga*, atau *Sudah termasuk harga*, dengan tarif yang bisa diubah (bawaan 11% dan 1,5%). Keduanya dihitung dari harga sebelum pajak (DPP); bila ada yang "sudah termasuk", DPP = subtotal / (1 + jumlah tarif yang termasuk). Tidak ada batas Rp 2.000.000 dan tidak ada diskon. Satu kolom **No. Kontrak / SP**.
 
+**Barang tidak kena pajak dalam satu nota**: tiap baris di form faktur punya kotak centang **PPN** dan **PPH** (nonaktif bila mode pajaknya Tanpa). Baris yang tidak dicentang tidak ikut dasar perhitungan pajak. Di master barang ada **Bebas PPN** dan **Bebas PPH** (dipakai bersama semua toko) sebagai nilai awal centang itu saat barang ditambahkan ke nota; tetap bisa diubah per nota. Di PDF, barang bebas PPN diberi tanda `*` dengan catatan "* Barang bebas PPN".
+
+**Pembatasan jenis per toko (hardcode):** Toko Rizky Nabila (kode `RN`) hanya menampilkan **Penjualan Langsung**; tombol INAPROC dan SP disembunyikan dan server menolak jenis lain. Aturannya ada di `src/services/store-rules.js`, baris `RN: { fakturTypes: ['LANGSUNG'] }`. **Untuk menghilangkan pembatasan**, hapus baris `RN:` itu (atau isi `['INAPROC','SP','LANGSUNG']`), lalu restart server. Toko lain bisa ditambah dengan baris serupa memakai kode tokonya.
+
 Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (modal unggah), **Ubah**, dan **Hapus** (owner):
 
 - **Ubah**: jenis, pelanggan, tanggal, nomor, kontrak/SP, pajak, dan barang. Stok disesuaikan sebesar selisih (tercatat "Ubah jual" di kartu stok). Pembayaran yang sudah masuk tetap; total baru tidak boleh di bawah jumlah yang sudah dibayar. Baris lama tetap memakai harga dasar dan (untuk SP/Langsung) harga yang tercatat saat itu; baris baru memakai harga sekarang. Bila jenis diganti, semua harga mengikuti jenis baru. Transaksi yang sudah dibatalkan tidak bisa diubah.
@@ -135,7 +141,7 @@ Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (moda
 
 ## Laporan: PPN, PPH, HPP, laba
 
-Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
+Rincian Transaksi Penjualan memuat kolom **No. Pesanan / SP** (isian No. Kontrak / SP). Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
 
 ### Stok, piutang, dan cetak
 
@@ -172,6 +178,8 @@ Pengaturan > **Template dokumen** hanya memilih template untuk toko tersebut (in
 | **Bawaan** | Invoice layout *Nota Penjualan*, surat jalan, dan permohonan pembayaran standar. Memakai logo dari Pengaturan toko. |
 | **Ardana** | Khusus CV Ardana Jaya Sejahtera: logo, ornamen, footer penuh, ucapan terima kasih. Tampilan tetap. |
 | **Rizky Nabila (hijau stabilo)** | Khusus Toko Rizky Nabila: kop logo RN, tabel berheader hijau stabilo (#90FA26) dengan baris kosong, kotak catatan merah, Tanda Terima / Hormat Kami. Invoice mengikuti form Excel toko; Surat Jalan dan SPP didesain dengan palet yang sama. |
+
+Catatan PDF: kata "(termasuk)" pada baris PPN/PPH tidak lagi dicetak. Di template Rizky, baris PPH tidak ditampilkan di invoice (konstanta `SHOW_PPH = false` di `src/templates/rizky.js`; ubah ke `true` untuk menampilkan), dan Surat Jalan hanya memuat Penerima dan Hormat Kami.
 
 Template berbentuk tetap (tanpa pilihan warna/logo), tetapi nama toko, alamat, telepon, rekening, dan penandatangan tetap diambil dari Pengaturan toko.
 
@@ -211,7 +219,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-175 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
+183 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

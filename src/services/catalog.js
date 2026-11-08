@@ -1,6 +1,6 @@
 // Katalog barang bersama: satu barang (item_id) punya satu baris di tiap toko (stok, harga dasar, harga jual per toko).
 // Data bersama (SKU, barcode, nama, kategori, satuan, aktif) disamakan di semua baris item yang sama.
-const SHARED = ['sku', 'barcode', 'name', 'category_id', 'unit', 'active'];
+const SHARED = ['sku', 'barcode', 'name', 'category_id', 'unit', 'active', 'no_ppn', 'no_pph']; // no_ppn/no_pph: barang bebas PPN/PPH (default centang di faktur)
 const PER_STORE = ['buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price', 'wholesale_min', 'min_stock'];
 const COPY = [...SHARED, 'buy_price', 'sell_price', 'price_ekatalog', 'price_sp', 'price_langsung', 'wholesale_price', 'wholesale_min', 'created_at'];
 
