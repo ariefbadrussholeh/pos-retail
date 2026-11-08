@@ -25,7 +25,7 @@ const REPORTS = {
   },
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
-    cols: [C('sale_no', 'No. Transaksi'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('contract_no', 'No. Pesanan / SP'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    cols: [C('sale_no', 'No. Transaksi'), C('contract_no', 'No. Pesanan / SP'), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'), C('method', 'Metode'), C('status', 'Status'), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
     // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {
       const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
