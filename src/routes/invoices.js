@@ -24,22 +24,6 @@ const METHODS = ['TUNAI', 'DEBIT', 'QRIS', 'TRANSFER', 'KREDIT'];
 const MODES = ['NONE', 'INCLUDE', 'EXCLUDE'];
 const PRICE_COL = { INAPROC: 'price_ekatalog', SP: 'price_sp', LANGSUNG: 'price_langsung' };
 
-// PPN dihitung dari DPP (dasar pengenaan pajak) PER BARIS. Tiap baris punya centang kena PPN (ppn_on); baris yang tidak dicentang tidak dikenai PPN.
-// Pada baris yang "sudah termasuk", DPP = jumlah baris / (1 + tarif PPN). total = subtotal + PPN bila "ditambahkan".
-// Semua hasil dibulatkan KE ATAS ke rupiah penuh. PPH tidak ada di nota: dihitung terpisah untuk laporan (services/pph.js).
-function calcTax(lines, ppnMode, ppnRate) {
-  let subtotal = 0; let ppn = 0; let dppTotal = 0;
-  for (const l of lines) {
-    subtotal += l.total;
-    const onN = ppnMode !== 'NONE' && l.ppn_on;
-    const dpp = l.total / (onN && ppnMode === 'INCLUDE' ? 1 + ppnRate / 100 : 1);
-    dppTotal += dpp;
-    if (onN) ppn += dpp * ppnRate / 100;
-  }
-  subtotal = pphLib.up(subtotal); const tax = pphLib.up(ppn);
-  const total = subtotal + (ppnMode === 'EXCLUDE' ? tax : 0);
-  return { subtotal, dpp: dppTotal, tax, total };
-}
 function readTax(b) {
   const mode = (v, d) => { const m = String(v == null || v === '' ? d : v).toUpperCase(); if (!MODES.includes(m)) throw err(400, 'Mode pajak tidak valid'); return m; };
   const n = b.tax_rate == null || b.tax_rate === '' ? 11 : num(b.tax_rate);
@@ -118,7 +102,7 @@ router.post('/', wrap(async (req, res) => {
   const id = await db.tx(async (t) => {
     const customer_id = await checkCustomer(t, b);
     const { lines, subtotal } = await buildLines(t, req.sid, h.type, h.items, null);
-    const x = calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate); const hp = pphLib.calc(h.type, h.pay_type, x.dpp);
+    const x = pphLib.calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate); const hp = pphLib.calc(h.type, h.pay_type, x.dpp);
     const paid = round2(Math.max(num(b.paid), 0));
     if (paid > x.total) throw err(400, 'Pembayaran melebihi total');
     const method = paid >= x.total && x.total > 0 ? payMethod : 'KREDIT';
@@ -169,7 +153,7 @@ router.put('/:id(\\d+)', wrap(async (req, res) => {
     const oldCost = new Map(); const oldQty = new Map(); const oldPrice = new Map();
     for (const o of old) { if (!oldCost.has(o.product_id)) { oldCost.set(o.product_id, o.cost); oldPrice.set(o.product_id, o.price); } oldQty.set(o.product_id, round3((oldQty.get(o.product_id) || 0) + o.qty)); }
     const { lines, subtotal } = await buildLines(t, req.sid, h.type, h.items, oldCost, h.type === s.kind ? oldPrice : null);
-    const x = calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate); const hp = pphLib.calc(h.type, h.pay_type, x.dpp);
+    const x = pphLib.calcTax(lines, h.tx.ppn_mode, h.tx.ppn_rate); const hp = pphLib.calc(h.type, h.pay_type, x.dpp);
     if (x.total < s.paid) throw err(400, `Total baru (${x.total}) lebih kecil dari yang sudah dibayar (${s.paid}). Ubah dulu pembayarannya`);
 
     let sale_no = String(b.doc_no || '').trim().slice(0, 30) || s.sale_no;

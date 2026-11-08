@@ -27,9 +27,11 @@ const REPORTS = {
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
     // Kolom nomor mengikuti aturan toko (services/store-rules.js, reportRefs): RN hanya No. Invoice, AJS hanya No. SP.
-    cols: (code) => { const refs = storeRules.reportRefs(code); const both = refs.length > 1; return [
+    cols: (code) => { const refs = storeRules.reportRefs(code); const both = refs.length > 1; const ina = storeRules.fakturTypes(code).includes('INAPROC'); return [
+      ...(refs.includes('contract') ? [C('contract_no', both ? 'No. Pesanan / SP' : 'No. SP')] : []), // nomor SP selalu paling depan
       ...(refs.includes('invoice') ? [C('sale_no', both ? 'No. Transaksi' : 'No. Invoice')] : []), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'),
-      ...(refs.includes('contract') ? [C('contract_no', both ? 'No. Pesanan / SP' : 'No. SP')] : []), C('pay_type', 'UP / LS'), C('method', 'Metode'), C('status', 'Status'),
+      ...(ina ? [C('pay_type', 'UP / LS')] : []), // UP/LS hanya untuk toko yang menjual INAPROC (tidak untuk Rizky Nabila)
+      C('status', 'Status'),
       C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)]; },
     // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {

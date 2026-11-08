@@ -129,7 +129,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   for (const tp of ['INAPROC', 'SP']) assert.equal((await A.post('/api/invoices', { ...base1, type: tp, items: [{ product_id: prRN.id, qty: 1 }] })).code, 400);
   assert.equal((await A.post('/api/invoices', { ...base1, items: [{ product_id: prRN.id, qty: 1 }], type: undefined })).code, 201);
   const lgRN = await A.post('/api/invoices', { ...base1, type: 'LANGSUNG', items: [{ product_id: prRN.id, qty: 1 }] }); assert.equal(lgRN.code, 201); assert.equal(lgRN.kind, 'LANGSUNG');
-  const rdRN = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); assert.ok(rdRN.cols.some((c) => c.key === 'sale_no' && c.label === 'No. Invoice') && !rdRN.cols.some((c) => c.key === 'contract_no'));
+  const rdRN = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); assert.ok(rdRN.cols.some((c) => c.key === 'sale_no' && c.label === 'No. Invoice') && !rdRN.cols.some((c) => c.key === 'contract_no') && !rdRN.cols.some((c) => c.key === 'pay_type' || c.key === 'method'));
   A.h['x-store'] = String(B); assert.deepEqual((await A.get('/api/settings')).faktur_types, ['INAPROC', 'SP', 'LANGSUNG']); ok('toko RN: hanya Penjualan Langsung (jenis lain ditolak server, form menerima daftar jenis); toko lain bebas');
   assert.equal((await A.post('/api/invoices', { ...base1, type: 'XYZ' })).code, 400); ok('jenis penjualan divalidasi');
   assert.equal((await A.post('/api/invoices', { ...base1, doc_no: i2.sale_no })).code, 409); ok('nomor dokumen dobel ditolak');
@@ -145,7 +145,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const rep = await A.get('/api/reports/sales_daily?from=2026-10-08&to=2026-10-08'); assert.ok(rep.rows[0] && rep.rows[0].total >= 4300000); ok('faktur masuk laporan penjualan (tanggal dokumen)');
   // ---- laporan: PPN, PPH, HPP, laba (harga dasar saat transaksi tersimpan)
   const rd = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08');
-  assert.ok(['tax', 'pph', 'hpp', 'profit', 'pay_type'].every((k) => rd.cols.some((c) => c.key === k))); assert.ok(rd.cols.some((c) => c.key === 'contract_no') && !rd.cols.some((c) => c.key === 'sale_no')); // toko AJS: hanya No. SP
+  assert.ok(['tax', 'pph', 'hpp', 'profit', 'pay_type'].every((k) => rd.cols.some((c) => c.key === k))); assert.ok(rd.cols.some((c) => c.key === 'contract_no') && !rd.cols.some((c) => c.key === 'sale_no') && rd.cols[0].key === 'contract_no' && !rd.cols.some((c) => c.key === 'method')); // toko AJS: hanya No. SP, paling depan; tanpa kolom Metode
   const rr = rd.rows.find((x) => x.sale_no === pp1.sale_no); assert.deepEqual([rr.tax, rr.pph, rr.hpp, rr.profit], [15180, 0, 100000, 38000]);
   const rr2 = rd.rows.find((x) => x.sale_no === pp2.sale_no); assert.deepEqual([rr2.tax, rr2.pph, rr2.hpp, rr2.profit], [1539, 210, 10000, 3776]); assert.equal(rr2.pay_type, 'LS');
   ok('laporan transaksi: PPN, PPH, HPP, dan laba (total - PPN - PPH - HPP)');
