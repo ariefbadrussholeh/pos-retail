@@ -3,7 +3,7 @@
 // Nomor urut mulai dari 1 lagi setiap tahun, per toko. Contoh hasil: 03 / X / AJS / 2026
 // Nomor berikutnya = nomor TERBESAR yang masih ada di toko itu pada tahun tersebut + 1 (dihitung dari data yang ada).
 // Jadi bila faktur terakhir dihapus, nomornya dipakai lagi; bila yang dihapus di tengah, nomor berikutnya tetap melanjutkan yang terbesar.
-const FORMAT = '{n} / {rom} / {code} / {yyyy}';
+const FORMAT = '{n}/{rom}/{code}/{yyyy}';
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 
 function formatNo(n, date, code) {
