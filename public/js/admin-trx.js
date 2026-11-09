@@ -200,7 +200,7 @@
   // ================= Laporan =================
   A.route('reports', { title: 'Laporan', async render(el) {
     const list = await POS.get('/api/reports'); let cur = list[0];
-    const d7 = new Date(); d7.setDate(d7.getDate() - 6); const from0 = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, '0')}-${String(d7.getDate()).padStart(2, '0')}`;
+    const from0 = `${new Date().getFullYear()}-01-01`; // default: awal tahun sampai hari ini
     el.innerHTML = A.head('Laporan & Excel', 'Pilih laporan, atur periode, lalu tampilkan atau unduh sebagai Excel') + `<div class="bar"><div class="grow"><label class="f">Laporan</label><select id="rp_sel">${list.map((r) => `<option value="${r.id}">${esc(r.title)}</option>`).join('')}</select></div><div id="rp_dates" style="display:flex;gap:10px"><div><label class="f">Dari</label><input type="date" id="rp_from" value="${from0}"></div><div><label class="f">Sampai</label><input type="date" id="rp_to" value="${today}"></div></div><div><button class="primary" id="rp_go">Tampilkan</button> <button id="rp_xl">Unduh Excel</button></div></div><div class="tablewrap" id="rp_tw"><div class="empty">Pilih laporan lalu klik Tampilkan</div></div>`;
     const fmt = { money: (v) => money(v), int: (v) => nf(v), qty: (v) => nf(v), date: (v) => POS.d(v), datetime: (v) => POS.dt(v), text: (v) => esc(v ?? '') };
     const qs = () => `from=${$('#rp_from', el).value}&to=${$('#rp_to', el).value}`;

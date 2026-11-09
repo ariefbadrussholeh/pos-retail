@@ -182,8 +182,8 @@ function paymentRequest(doc, s, d, imgs) {
     doc.font(o.bold ? 'Helvetica-Bold' : 'Helvetica').text(v, { width: W - 130, underline: !!o.underline, continued: false });
     y = Math.max(doc.y, y + 13);
   };
-  row('Nomor', d.no); row('Lampiran', '1 (satu) berkas'); row('Perihal', 'Permohonan Pembayaran', { bold: true, underline: true });
-  for (const [k, v] of refRows(d)) row(k, v);
+  // Ardana: yang tampil di kolom Nomor adalah No. SP / kontrak (bila kosong, nomor transaksi). Template Rizky memakai nomor transaksi.
+  row('Nomor', d.contract_no || d.no); row('Lampiran', '1 (satu) berkas'); row('Perihal', 'Permohonan Pembayaran', { bold: true, underline: true });
   y += 14;
   doc.font('Helvetica').fontSize(9).fillColor(P.body).text('Kepada Yth.', X0 + 2, y, { lineBreak: false });
   y += 13;

@@ -12,7 +12,7 @@ const { auth, owner } = require('../middleware/auth');
 const { wrap, err, num, round2, round3, ymd } = require('../services/util');
 const stock = require('../services/stock');
 const settings = require('../services/settings');
-const { formatNo, counterKey } = require('../services/doc-number');
+const { formatNo, counterKey, nextNo } = require('../services/doc-number');
 const { loadSale } = require('./sales');
 const storeRules = require('../services/store-rules');
 const pphLib = require('../services/pph');
@@ -67,8 +67,7 @@ async function buildLines(t, sid, type, items, oldCost, oldPrice) {
 // Pratinjau nomor berikutnya (tidak menaikkan counter)
 router.get('/next-no', wrap(async (req, res) => {
   const date = ymd(req.query.date) || db.today();
-  const c = await db.one('SELECT v FROM counters WHERE k = ?', [counterKey(req.sid, date)]);
-  res.json({ no: formatNo((c ? c.v : 0) + 1, date, req.store.code) });
+  res.json({ no: (await nextNo(db, req.sid, date, req.store.code)).no });
 }));
 
 function readHead(b, store, keepType) {
@@ -113,8 +112,9 @@ router.post('/', wrap(async (req, res) => {
     if (sale_no) {
       if (await t.one('SELECT id FROM sales WHERE store_id = ? AND sale_no = ?', [req.sid, sale_no])) throw err(409, 'Nomor dokumen sudah dipakai');
     } else {
-      for (let k = 0; k < 50 && !sale_no; k++) {
-        const n = await t.nextCounter(counterKey(req.sid, h.date));
+      await t.nextCounter(counterKey(req.sid, h.date)); // kunci baris counter: mencegah dua faktur bersamaan memakai nomor yang sama
+      let { n } = await nextNo(t, req.sid, h.date, req.store.code);
+      for (let k = 0; k < 50 && !sale_no; k++, n++) {
         const cand = formatNo(n, h.date, req.store.code).slice(0, 30);
         if (!(await t.one('SELECT id FROM sales WHERE store_id = ? AND sale_no = ?', [req.sid, cand]))) sale_no = cand;
       }

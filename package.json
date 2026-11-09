@@ -1,6 +1,6 @@
 {
   "name": "pos-retail",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "private": true,
   "description": "POS toko retail: Express.js + Supabase (Postgres)",
   "main": "src/server.js",

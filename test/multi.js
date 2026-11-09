@@ -147,7 +147,7 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   const rd = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08');
   assert.ok(['tax', 'pph', 'hpp', 'profit', 'pay_type'].every((k) => rd.cols.some((c) => c.key === k))); assert.ok(rd.cols.some((c) => c.key === 'contract_no') && !rd.cols.some((c) => c.key === 'sale_no') && rd.cols[0].key === 'contract_no' && !rd.cols.some((c) => c.key === 'method')); // toko AJS: hanya No. SP, paling depan; tanpa kolom Metode
   const rr = rd.rows.find((x) => x.sale_no === pp1.sale_no); assert.deepEqual([rr.tax, rr.pph, rr.hpp, rr.profit], [15180, 0, 100000, 38000]);
-  const rr2 = rd.rows.find((x) => x.sale_no === pp2.sale_no); assert.deepEqual([rr2.tax, rr2.pph, rr2.hpp, rr2.profit], [1539, 210, 10000, 3776]); assert.equal(rr2.pay_type, 'LS');
+  const rr2 = rd.rows.find((x) => x.sale_no === pp2.sale_no); assert.deepEqual([rr2.tax, rr2.pph, rr2.hpp, rr2.profit], [1539, 210, 10000, 3776]); assert.equal(rr2.pay_type, 'LS'); assert.deepEqual([rr.profit_pre, rr2.profit_pre], [38000, 3986]); assert.ok(!rd.cols.some((c) => c.key === 'cashier') && rd.cols.some((c) => c.key === 'profit_pre' && c.label === 'Laba Sebelum PPH') && rd.cols.some((c) => c.key === 'profit' && c.label === 'Laba Setelah PPH')); assert.equal((await A.get('/api/reports'))[0].id, 'sales_detail'); assert.ok(rd.rows.every((x, i) => i === 0 || x.created_at <= rd.rows[i - 1].created_at)); // terbaru di atas
   ok('laporan transaksi: PPN, PPH, HPP, dan laba (total - PPN - PPH - HPP)');
   await A.put('/api/products/' + pB.id, { buy_price: 12000 });
   const rd2 = await A.get('/api/reports/sales_detail?from=2026-10-08&to=2026-10-08'); assert.equal(rd2.rows.find((x) => x.sale_no === pp1.sale_no).profit, 38000); assert.equal(rd2.rows.find((x) => x.sale_no === pp1.sale_no).hpp, 100000);
@@ -241,5 +241,9 @@ module.exports = async function ({ A, K, mk, db, ok, assert, base }) {
   assert.equal((await A2.get('/api/sales/' + i1.id)).sale_no, i1.sale_no); ok('login & data utuh setelah restore');
   const dl2 = await A2.get(`/api/invoices/${i1.id}/docs/${d1j.id}/file`, true); assert.ok(Buffer.from(await dl2.arrayBuffer()).equals(pdfBytes)); assert.equal((await A2.get('/api/doc-types')).rows.length, dts.rows.length + 1); ok('dokumen & master dokumen ikut backup/restore');
   const nx = await A2.post('/api/products', { name: 'Barang baru pasca restore', stock: 2 }); assert.equal(nx.code, 201); ok('ID & penomoran lanjut normal setelah restore');
-  const i4 = await A2.post('/api/invoices', { ...base1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1000 }] }); assert.equal(i4.sale_no, String(auto + 3).padStart(2, '0') + ' / X / AJS / 2026'); ok('counter nomor dokumen ikut dipulihkan');
+  const nb4 = await A2.get('/api/invoices/next-no?date=2026-10-08');
+  const i4 = await A2.post('/api/invoices', { ...base1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1000 }] }); assert.equal(i4.sale_no, nb4.no); assert.ok(/^\d\d \/ X \/ AJS \/ 2026$/.test(i4.sale_no));
+  // nomor mengikuti data yang ada: hapus faktur terakhir -> nomornya dipakai lagi
+  await A2.del('/api/invoices/' + i4.id); assert.equal((await A2.get('/api/invoices/next-no?date=2026-10-08')).no, i4.sale_no);
+  const i4b = await A2.post('/api/invoices', { ...base1, tax_mode: 'NONE', items: [{ product_id: pB.id, qty: 1, price: 1000 }] }); assert.equal(i4b.sale_no, i4.sale_no); ok('nomor dokumen dihitung dari data yang ada (hapus terakhir -> nomor dipakai lagi)');
 };

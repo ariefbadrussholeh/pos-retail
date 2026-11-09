@@ -171,7 +171,7 @@ function paymentRequest(doc, s, d) {
   row('Alamat', [s.address, s.city].filter(Boolean).join(', ') || '-');
   if (s.bank_account) row(`No. Rekening ${s.bank_name || ''}`.trim(), `${s.bank_account}${s.bank_name ? ' (' + s.bank_name + ')' : ''}`);
   y += 10;
-  const ref = d.contract_no ? `Kontrak/Surat Pesanan ${d.contract_no}` : `transaksi ${d.no}`;
+  const ref = d.contract_no ? `Kontrak/Surat Pesanan ${d.contract_no}` : `nomor transaksi ${d.no}`;
   doc.font('Helvetica').fontSize(10).fillColor(C.ink).text(`Sehubungan dengan pekerjaan dengan ${ref} Tahun Anggaran ${String(d.date).slice(0, 4)}, dengan nilai tagihan sebagai berikut:`, X0, y, { width: W, lineGap: 2 }); y = doc.y + 10;
   // kotak nilai tagihan: pita hijau stabilo di kiri
   doc.rect(X0, y, W, 44).fill(C.tint); doc.rect(X0, y, 7, 44).fill(C.green);

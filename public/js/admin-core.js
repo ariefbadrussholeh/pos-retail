@@ -243,7 +243,10 @@
   A.renderStoreBox = () => {
     const sb = $('#storebox'); if (!sb) return;
     sb.innerHTML = A.ME.stores.length < 2 && !A.ME.stores[0] ? '' : `<label class="f" for="storeSel">Toko</label><select id="storeSel">${A.ME.stores.map((s) => `<option value="${s.id}" ${s.id === A.ME.store.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})${s.active ? '' : ' - nonaktif'}</option>`).join('')}</select>`;
-    const sel = $('#storeSel'); if (sel) sel.onchange = (e) => { POS.setStore(e.target.value); location.hash = location.hash.startsWith('#/dashboard') ? location.hash : '#/dashboard'; location.reload(); };
+    const sel = $('#storeSel'); if (sel) sel.onchange = (e) => { POS.setStore(e.target.value); // tetap di halaman yang sama; halaman berisi ID/isian satu toko (ubah, baru) kembali ke daftarnya
+      const h = location.hash || '#/dashboard'; const seg = h.replace(/^#\//, '').split('/');
+      if (seg.length > 1) location.hash = ({ invoice: '#/invoices', purchase: '#/purchases', receipt: '#/receipts', opname: '#/opnames' })[seg[0]] || '#/dashboard';
+      location.reload(); };
   };
   // Sidebar hanya berisi logo toko (tanpa nama)
   A.refreshBrand = () => {

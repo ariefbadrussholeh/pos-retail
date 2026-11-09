@@ -139,13 +139,15 @@ Tiga jenis, hanya memengaruhi harga:
 Di daftar Penjualan Faktur tiap baris punya tombol **Detail**, **Dokumen** (modal unggah), **Ubah**, dan **Hapus** (owner):
 
 - **Ubah**: jenis, pelanggan, tanggal, nomor, kontrak/SP, pajak, dan barang. Stok disesuaikan sebesar selisih (tercatat "Ubah jual" di kartu stok). Pembayaran yang sudah masuk tetap; total baru tidak boleh di bawah jumlah yang sudah dibayar. Baris lama tetap memakai harga dasar dan (untuk SP/Langsung) harga yang tercatat saat itu; baris baru memakai harga sekarang. Bila jenis diganti, semua harga mengikuti jenis baru. Transaksi yang sudah dibatalkan tidak bisa diubah.
-- **Hapus**: permanen. Stok dikembalikan (bila belum dibatalkan), pembayaran dan dokumen pendukung ikut terhapus. Nomor dokumen tidak dipakai ulang.
+- **Hapus**: permanen. Stok dikembalikan (bila belum dibatalkan), pembayaran dan dokumen pendukung ikut terhapus. Nomor dokumennya bisa dipakai lagi bila itu yang terbesar (lihat Format nomor dokumen).
 
 ### Upgrade dari v1.7 ke 1.8.x: perbaiki faktur lama
 
 Faktur yang dibuat di v1.7 menyimpan PPH di dalam total. Untuk menyamakan dengan aturan baru (total = subtotal + PPN, PPH hanya laporan): `npm run fix:tax` (hanya menampilkan perubahan), lalu `npm run fix:tax -- --yes` untuk menyimpan. Tambahkan `--pay=UP` (atau `LS`) untuk sekaligus mengisi UP/LS pada faktur INAPROC lama; tanpa itu PPH laporannya 0 sampai diubah lewat Ubah. Pembayaran yang sudah masuk tidak diubah; faktur yang total barunya di bawah pembayaran dilewati dan dilaporkan. Aman diulang.
 
 ## Laporan: PPN, PPH, HPP, laba
+
+Menu Laporan: **Rincian Transaksi Penjualan** ada paling atas dan jadi pilihan awal; rentang tanggal awal = **1 Januari tahun ini sampai hari ini**; urutan **terbaru di atas** (rincian, harian, pembelian, penerimaan, opname). Laba ditampilkan dua kolom: **Laba Sebelum PPH** (Total − PPN − HPP, sama dengan Subtotal − HPP) dan **Laba Setelah PPH** (dikurangi PPH). Kolom Kasir tidak ada di laporan rincian.
 
 Rincian Transaksi Penjualan memuat **No. Invoice** dan/atau **No. Pesanan / SP** (sesuai aturan toko) (No. SP selalu paling depan) serta kolom **UP / LS** (hanya toko yang menjual INAPROC, jadi tidak di Rizky Nabila). Kolom Metode (Tunai/Kredit) dihilangkan. Daftar Penjualan dan Penjualan Faktur juga menampilkan No. SP di kolom pertama. PPH di laporan hanya terisi untuk INAPROC. Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
 
@@ -160,7 +162,7 @@ Tombol **Dokumen** ada di baris daftar Penjualan Faktur (modal terpisah, tanpa m
 
 ### Format nomor dokumen
 
-Sama untuk semua toko: `{n} / {rom} / {code} / {yyyy}`, contoh `03 / X / AJS / 2026` (urut per toko, mulai 1 lagi tiap tahun). Nomor bisa juga diisi manual. **Untuk mengubah format**, edit konstanta `FORMAT` di `src/services/doc-number.js` (token: `{n}` `{n3}` `{rom}` `{mm}` `{code}` `{yyyy}` `{yy}`).
+Sama untuk semua toko: `{n} / {rom} / {code} / {yyyy}`, contoh `03 / X / AJS / 2026` (urut per toko, mulai 1 lagi tiap tahun). **Nomor berikutnya = nomor terbesar yang masih ada di toko itu pada tahun tersebut + 1**, dihitung dari data yang ada: bila faktur terakhir (04) dihapus, faktur baru kembali mendapat 04; bila yang dihapus di tengah, nomor tetap melanjutkan yang terbesar. Nomor bisa juga diisi manual (nomor manual yang lebih besar ikut menjadi acuan). **Untuk mengubah format**, edit konstanta `FORMAT` di `src/services/doc-number.js` (token: `{n}` `{n3}` `{rom}` `{mm}` `{code}` `{yyyy}` `{yy}`).
 
 ## Refresh database
 
@@ -184,6 +186,10 @@ Pengaturan > **Template dokumen** hanya memilih template untuk toko tersebut (in
 | **Bawaan** | Invoice layout *Nota Penjualan*, surat jalan, dan permohonan pembayaran standar. Memakai logo dari Pengaturan toko. |
 | **Ardana** | Khusus CV Ardana Jaya Sejahtera: logo, ornamen, footer penuh, ucapan terima kasih. Tampilan tetap. |
 | **Rizky Nabila (hijau stabilo)** | Khusus Toko Rizky Nabila: kop logo RN, tabel berheader hijau stabilo (#90FA26) dengan baris kosong, kotak catatan merah, Tanda Terima / Hormat Kami. Invoice mengikuti form Excel toko; Surat Jalan dan SPP didesain dengan palet yang sama. |
+
+Nomor di Permohonan Pembayaran (SPP): template **Ardana** menampilkan **No. SP / kontrak** (bila kosong, nomor transaksi); template **Rizky** menampilkan nomor transaksi. Untuk mengubahnya, edit baris `row('Nomor', ...)` di fungsi permohonan pembayaran pada `src/templates/ardana.js` (atau `rizky.js`).
+
+Pindah toko lewat dropdown di atas tetap di halaman yang sama (halaman ubah/baru kembali ke daftarnya).
 
 Catatan PDF: kata "(termasuk)" tidak dicetak, dan PPH tidak pernah tampil di dokumen (hanya laporan). Surat Jalan Rizky hanya memuat Penerima dan Hormat Kami.
 

@@ -12,40 +12,40 @@ const C = (key, label, type = 'text', sum = false) => ({ key, label, type, sum }
 const DONE = "s.store_id = ? AND s.status = 'DONE'"; // param pertama selalu id toko
 
 const REPORTS = {
-  sales_daily: {
-    title: 'Penjualan Harian', ranged: true,
-    cols: [C('date', 'Tanggal', 'date'), C('trx', 'Transaksi', 'int', true), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
-    async run(q, r, sid) {
-      const rows = await db.query(`SELECT DATE(s.created_at) AS date, COUNT(*) AS trx, SUM(s.subtotal) AS subtotal, SUM(s.tax) AS tax, SUM(s.pph) AS pph, SUM(s.total) AS total, SUM(s.total - s.tax - s.pph) AS dpp
-        FROM sales s WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at) ORDER BY DATE(s.created_at)`, [sid, r.f, r.t]);
-      const m = await db.query(`SELECT DATE(s.created_at) AS date, SUM(i.cost * i.qty) AS hpp FROM sale_items i JOIN sales s ON s.id = i.sale_id
-        WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at)`, [sid, r.f, r.t]);
-      const mm = new Map(m.map((x) => [x.date, x.hpp]));
-      return rows.map((x) => { const hpp = mm.get(x.date) || 0; return { ...x, hpp: round2(hpp), profit: round2(x.dpp - hpp) }; });
-    },
-  },
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
     // Kolom nomor mengikuti aturan toko (services/store-rules.js, reportRefs): RN hanya No. Invoice, AJS hanya No. SP.
     cols: (code) => { const refs = storeRules.reportRefs(code); const both = refs.length > 1; const ina = storeRules.fakturTypes(code).includes('INAPROC'); return [
       ...(refs.includes('contract') ? [C('contract_no', both ? 'No. Pesanan / SP' : 'No. SP')] : []), // nomor SP selalu paling depan
-      ...(refs.includes('invoice') ? [C('sale_no', both ? 'No. Transaksi' : 'No. Invoice')] : []), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('cashier', 'Kasir'), C('customer', 'Pelanggan'),
+      ...(refs.includes('invoice') ? [C('sale_no', both ? 'No. Transaksi' : 'No. Invoice')] : []), C('created_at', 'Waktu', 'datetime'), C('kind', 'Jenis'), C('customer', 'Pelanggan'),
       ...(ina ? [C('pay_type', 'UP / LS')] : []), // UP/LS hanya untuk toko yang menjual INAPROC (tidak untuk Rizky Nabila)
       C('status', 'Status'),
-      C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)]; },
-    // Laba = total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
+      C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit_pre', 'Laba Sebelum PPH', 'money', true), C('profit', 'Laba Setelah PPH', 'money', true)]; },
+    // Laba Sebelum PPH = total - PPN - HPP (= subtotal - HPP); Laba Setelah PPH = Laba Sebelum PPH - PPH. Kolom lama: total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {
       const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.pay_type, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
         (SELECT COALESCE(SUM(i.cost * i.qty), 0) FROM sale_items i WHERE i.sale_id = s.id) AS hpp
-        FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.id`, [sid, r.f, r.t]);
+        FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.created_at DESC, s.id DESC`, [sid, r.f, r.t]);
       return rows.map((x) => (x.status === 'VOID'
-        ? { ...x, subtotal: 0, tax: 0, pph: 0, total: 0, paid: 0, hpp: 0, profit: 0 }
-        : { ...x, hpp: round2(x.hpp), profit: round2(x.total - x.tax - x.pph - x.hpp) }));
+        ? { ...x, subtotal: 0, tax: 0, pph: 0, total: 0, paid: 0, hpp: 0, profit_pre: 0, profit: 0 }
+        : { ...x, hpp: round2(x.hpp), profit_pre: round2(x.total - x.tax - x.hpp), profit: round2(x.total - x.tax - x.pph - x.hpp) }));
+    },
+  },
+  sales_daily: {
+    title: 'Penjualan Harian', ranged: true,
+    cols: [C('date', 'Tanggal', 'date'), C('trx', 'Transaksi', 'int', true), C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('hpp', 'HPP', 'money', true), C('profit_pre', 'Laba Sebelum PPH', 'money', true), C('profit', 'Laba Setelah PPH', 'money', true)],
+    async run(q, r, sid) {
+      const rows = await db.query(`SELECT DATE(s.created_at) AS date, COUNT(*) AS trx, SUM(s.subtotal) AS subtotal, SUM(s.tax) AS tax, SUM(s.pph) AS pph, SUM(s.total) AS total, SUM(s.total - s.tax - s.pph) AS dpp, SUM(s.total - s.tax) AS pre
+        FROM sales s WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at) ORDER BY DATE(s.created_at) DESC`, [sid, r.f, r.t]);
+      const m = await db.query(`SELECT DATE(s.created_at) AS date, SUM(i.cost * i.qty) AS hpp FROM sale_items i JOIN sales s ON s.id = i.sale_id
+        WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ? GROUP BY DATE(s.created_at)`, [sid, r.f, r.t]);
+      const mm = new Map(m.map((x) => [x.date, x.hpp]));
+      return rows.map((x) => { const hpp = mm.get(x.date) || 0; return { ...x, hpp: round2(hpp), profit_pre: round2(x.pre - hpp), profit: round2(x.dpp - hpp) }; });
     },
   },
   sales_items: {
     title: 'Penjualan per Barang', ranged: true,
-    cols: [C('sku', 'SKU'), C('name', 'Nama Barang'), C('unit', 'Satuan'), C('qty', 'Qty', 'qty', true), C('revenue', 'Penjualan (sebelum pajak)', 'money', true), C('cost', 'HPP', 'money', true), C('profit', 'Laba', 'money', true)],
+    cols: [C('sku', 'SKU'), C('name', 'Nama Barang'), C('unit', 'Satuan'), C('qty', 'Qty', 'qty', true), C('revenue', 'Penjualan (sebelum pajak)', 'money', true), C('cost', 'HPP', 'money', true), C('profit_pre', 'Laba Sebelum PPH', 'money', true), C('profit', 'Laba Setelah PPH', 'money', true)],
     // Penjualan sebelum pajak = DPP tiap baris (faktur: sesuai centang kena PPN/PPH per baris; POS: dibagi proporsional)
     async run(q, r, sid) {
       const lines = await db.query(`SELECT i.product_id, i.sku, i.name, i.unit, i.qty, i.total, i.cost, i.ppn_on, i.pph_on, s.kind, s.subtotal, s.total AS stotal, s.tax, s.pph, s.tax_mode, s.tax_rate, s.pph_mode, s.pph_rate
@@ -64,7 +64,7 @@ const REPORTS = {
         const x = g.get(k) || { sku: l.sku, name: l.name, unit: l.unit, qty: 0, gross: 0, revenue: 0, cost: 0, pph: 0 };
         x.qty += l.qty; x.gross += l.total; x.revenue += rev; x.cost += l.cost * l.qty; x.pph += pphShare; g.set(k, x);
       }
-      return [...g.values()].sort((a, b) => b.gross - a.gross).map((x) => ({ sku: x.sku, name: x.name, unit: x.unit, qty: round3(x.qty), revenue: round2(x.revenue), cost: round2(x.cost), profit: round2(x.revenue - x.cost - x.pph) }));
+      return [...g.values()].sort((a, b) => b.gross - a.gross).map((x) => ({ sku: x.sku, name: x.name, unit: x.unit, qty: round3(x.qty), revenue: round2(x.revenue), cost: round2(x.cost), profit_pre: round2(x.revenue - x.cost), profit: round2(x.revenue - x.cost - x.pph) }));
     },
   },
   sales_cashier: {
@@ -89,20 +89,20 @@ const REPORTS = {
     title: 'Pembelian', ranged: true, dateOnly: true,
     cols: [C('po_no', 'No. Pembelian'), C('date', 'Tanggal', 'date'), C('supplier', 'Pemasok'), C('supplier_ref', 'No. Faktur Pemasok'), C('status', 'Status'), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('outstanding', 'Sisa Hutang', 'money', true)],
     run: (q, r, sid) => db.query(`SELECT p.po_no, p.date, s.name AS supplier, p.supplier_ref, p.status, p.total, p.paid, CASE WHEN p.status = 'CANCELLED' THEN 0 ELSE p.total - p.paid END AS outstanding
-      FROM purchases p JOIN suppliers s ON s.id = p.supplier_id WHERE p.store_id = ? AND p.date >= ? AND p.date <= ? ORDER BY p.id`, [sid, r.from, r.to]),
+      FROM purchases p JOIN suppliers s ON s.id = p.supplier_id WHERE p.store_id = ? AND p.date >= ? AND p.date <= ? ORDER BY p.id DESC`, [sid, r.from, r.to]),
   },
   receipts: {
     title: 'Penerimaan Barang', ranged: true, dateOnly: true,
     cols: [C('gr_no', 'No. Penerimaan'), C('date', 'Tanggal', 'date'), C('po_no', 'No. Pembelian'), C('supplier', 'Pemasok'), C('supplier_do', 'SJ Pemasok'), C('status', 'Status'), C('sku', 'SKU'), C('name', 'Barang'), C('qty', 'Qty', 'qty'), C('price', 'Harga', 'money'), C('total', 'Nilai', 'money', true)],
     run: (q, r, sid) => db.query(`SELECT g.gr_no, g.date, pu.po_no, s.name AS supplier, g.supplier_do, g.status, p.sku, i.name, i.qty, i.price, i.qty * i.price AS total
       FROM goods_receipt_items i JOIN goods_receipts g ON g.id = i.receipt_id JOIN purchases pu ON pu.id = g.purchase_id JOIN suppliers s ON s.id = g.supplier_id JOIN products p ON p.id = i.product_id
-      WHERE g.store_id = ? AND g.date >= ? AND g.date <= ? ORDER BY g.id, i.id`, [sid, r.from, r.to]),
+      WHERE g.store_id = ? AND g.date >= ? AND g.date <= ? ORDER BY g.id DESC, i.id`, [sid, r.from, r.to]),
   },
   opnames: {
     title: 'Stok Opname', ranged: true, dateOnly: true,
     cols: [C('opname_no', 'No. Opname'), C('date', 'Tanggal', 'date'), C('name', 'Barang'), C('unit', 'Satuan'), C('system_qty', 'Stok Sistem', 'qty'), C('counted_qty', 'Hasil Hitung', 'qty'), C('diff', 'Selisih', 'qty'), C('value', 'Nilai Selisih', 'money', true)],
     run: (q, r, sid) => db.query(`SELECT o.opname_no, o.date, i.name, i.unit, i.system_qty, i.counted_qty, i.diff, i.diff * i.cost AS value
-      FROM opname_items i JOIN opnames o ON o.id = i.opname_id WHERE o.store_id = ? AND o.date >= ? AND o.date <= ? ORDER BY o.id, i.id`, [sid, r.from, r.to]),
+      FROM opname_items i JOIN opnames o ON o.id = i.opname_id WHERE o.store_id = ? AND o.date >= ? AND o.date <= ? ORDER BY o.id DESC, i.id`, [sid, r.from, r.to]),
   },
   receivables: {
     title: 'Piutang Pelanggan',
