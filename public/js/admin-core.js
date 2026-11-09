@@ -152,23 +152,29 @@
   });
 
   // ---------- Pemilih barang (dialog cari + Enter) ----------
-  A.pickProduct = function () {
-    let list = [], sel = 0, lastQ = null;
-    const m = POS.modal({ title: 'Pilih barang', hint: 'ketik atau scan barcode &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> <kbd>Enter</kbd>', body: '<input id="pq" placeholder="Nama, SKU, atau barcode" autocomplete="off" autofocus><table class="lst" style="margin-top:10px;width:100%"><tbody id="pl"></tbody></table>',
+  // opt.categories = true: tampilkan pilihan kategori (awal: Semua kategori)
+  A.pickProduct = function (opt = {}) {
+    let list = [], sel = 0, lastQ = null, lastC = '';
+    const m = POS.modal({ title: 'Pilih barang', hint: 'ketik atau scan barcode &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> <kbd>Enter</kbd>', body: `${opt.categories ? '<select id="pc" style="margin-bottom:8px" aria-label="Kategori"><option value="">Semua kategori</option></select>' : ''}<input id="pq" placeholder="Nama, SKU, atau barcode" autocomplete="off" autofocus><table class="lst" style="margin-top:10px;width:100%"><tbody id="pl"></tbody></table>`,
       onKey: async (e, mm) => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length; draw(); } }
         else if (e.key === 'Enter') {
           e.preventDefault();
           // scanner mengirim Enter sebelum pencarian (debounce) selesai: muat dulu, lalu pilih yang kodenya persis sama
-          const term = $('#pq', el).value.trim(); if (term !== lastQ) await loadNow();
+          const term = $('#pq', el).value.trim(); if (term !== lastQ || catId() !== lastC) await loadNow();
           const exact = list.find((p) => p.barcode === term || p.sku === term);
           const pick = exact || list[sel]; if (pick) mm.close(pick);
         }
       } });
     const el = m.el; const draw = () => { $('#pl', el).innerHTML = list.length ? list.map((p, i) => `<tr data-i="${i}" class="${i === sel ? 'sel' : ''}"><td class="mono muted">${esc(p.barcode || p.sku)}</td><td>${esc(p.name)}</td><td class="r mono">${nf(p.stock)} ${esc(p.unit)}</td></tr>`).join('') : '<tr><td class="muted">Tidak ada hasil</td></tr>'; };
-    const loadNow = async () => { const t = $('#pq', el).value.trim(); list = (await POS.get('/api/products?' + POS.qs({ q: t, active: 1, limit: 10 }))).rows; lastQ = t; sel = 0; draw(); };
+    const catId = () => (opt.categories ? $('#pc', el).value : '');
+    const loadNow = async () => { const t = $('#pq', el).value.trim(); const c = catId(); list = (await POS.get('/api/products?' + POS.qs({ q: t, active: 1, category_id: c || undefined, limit: c ? 50 : 10 }))).rows; lastQ = t; lastC = c; sel = 0; draw(); };
     const load = debounce(loadNow, 150);
     $('#pq', el).addEventListener('input', load); loadNow();
+    if (opt.categories) {
+      POS.get('/api/categories?limit=500').then((r) => { $('#pc', el).insertAdjacentHTML('beforeend', r.rows.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')); }).catch(() => {});
+      $('#pc', el).addEventListener('change', () => { loadNow(); $('#pq', el).focus(); });
+    }
     el.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-i]'); if (tr) m.close(list[+tr.dataset.i]); });
     return m.done;
   };

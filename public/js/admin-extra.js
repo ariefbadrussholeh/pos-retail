@@ -123,7 +123,7 @@
       tot();
     }
     async function add() {
-      const p = await A.pickProduct(); if (!p) return;
+      const p = await A.pickProduct({ categories: true }); if (!p) return;
       const ex = lines.find((l) => l.product_id === p.id);
       if (ex) ex.qty = num(ex.qty) + 1; else { const l = { product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, stock: p.stock, price_ekatalog: p.price_ekatalog, price_sp: p.price_sp, price_langsung: p.price_langsung, qty: 1, edited: false, ppn_on: !p.no_ppn }; l.price = num(l[PRICE_KEY[type]]); lines.push(l); }
       draw();
