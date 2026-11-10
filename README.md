@@ -149,7 +149,11 @@ Faktur yang dibuat di v1.7 menyimpan PPH di dalam total. Untuk menyamakan dengan
 
 ## Laporan: PPN, PPH, HPP, laba
 
-Menu Laporan: **Rincian Transaksi Penjualan** ada paling atas dan jadi pilihan awal; rentang tanggal awal = **1 Januari tahun ini sampai hari ini**; urutan **terbaru di atas** (rincian, harian, pembelian, penerimaan, opname). Laba ditampilkan dua kolom: **Laba Sebelum PPH** (Total − PPN − HPP, sama dengan Subtotal − HPP) dan **Laba Setelah PPH** (dikurangi PPH). Kolom Kasir tidak ada di laporan rincian.
+**Detail dan laba per barang:** di laporan Rincian Transaksi Penjualan, klik dua kali sebuah baris untuk membuka modal detail transaksi (seperti detail faktur) dengan tambahan kolom **HPP**, **Laba Sebelum PPH**, dan **Laba Setelah PPH** per barang (hijau untung, merah minus) beserta ringkasan laba transaksi. Angka per barang dibulatkan terpisah, jadi bisa selisih di bawah Rp1 dari baris laporan; ringkasan laba memakai angka yang sama dengan baris laporan.
+
+**Filter tanggal awal** di semua daftar (Penjualan, Penjualan Faktur, Pembelian, Penerimaan, Kartu Stok, Laporan) = 1 Januari tahun ini sampai hari ini. Untuk mengubahnya, edit fungsi `POS.yearStart` di `public/js/common.js` (satu tempat untuk semuanya).
+
+Menu Laporan: **Rincian Transaksi Penjualan** ada paling atas dan jadi pilihan awal; urutan **terbaru di atas** (rincian, harian, pembelian, penerimaan, opname). Laba ditampilkan dua kolom: **Laba Sebelum PPH** (Total − PPN − HPP, sama dengan Subtotal − HPP) dan **Laba Setelah PPH** (dikurangi PPH). Kolom Kasir tidak ada di laporan rincian.
 
 Rincian Transaksi Penjualan memuat **No. Invoice** dan/atau **No. Pesanan / SP** (sesuai aturan toko) (No. SP selalu paling depan) serta kolom **UP / LS** (hanya toko yang menjual INAPROC, jadi tidak di Rizky Nabila). Kolom Metode (Tunai/Kredit) dihilangkan. Daftar Penjualan dan Penjualan Faktur juga menampilkan No. SP di kolom pertama. PPH di laporan hanya terisi untuk INAPROC. Rincian Transaksi Penjualan, Penjualan Harian, dan Penjualan per Barang memuat **PPN**, **PPH**, **HPP**, dan **Laba**. Laba = total - PPN - PPH - HPP. HPP memakai **harga dasar saat transaksi** (disimpan di `sale_items.cost`), jadi laba transaksi lama tidak berubah ketika harga dasar barang diubah kemudian. PPN/PPH kosong dihitung 0. Transaksi batal tampil dengan angka 0.
 
@@ -233,7 +237,7 @@ Ganti `api/index.js` dengan entrypoint function Anda.
 DATABASE_URL=... node test/run.js     # database kosong; jalan di Postgres dan MySQL
 ```
 
-183 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
+184 pemeriksaan end-to-end: auth dan role, penjualan (pajak, grosir, kredit, void, 8 penjualan paralel), pembelian, penerimaan, opname, barcode, laporan, Excel, PDF, multi toko (isolasi data), penjualan faktur (INAPROC/SP/Langsung, PPN dan PPH bebas, ubah dan hapus, piutang, void, dokumen pendukung), laporan PPN/PPH/laba, pelanggan/pemasok bersama, template dokumen, backup dan restore.
 
 ## Struktur
 

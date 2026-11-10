@@ -60,6 +60,7 @@
   POS.esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   POS.dt = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}` : '');
   POS.d = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : '');
+  POS.yearStart = () => `${new Date().getFullYear()}-01-01`; // default semua filter tanggal: 1 Januari tahun ini
   POS.today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   // Angka gaya Indonesia: 1.500 = seribu lima ratus, 1,5 / 1.5 = satu koma lima
   POS.toNum = (v) => {

@@ -11,6 +11,20 @@ router.use(auth, owner);
 const C = (key, label, type = 'text', sum = false) => ({ key, label, type, sum });
 const DONE = "s.store_id = ? AND s.status = 'DONE'"; // param pertama selalu id toko
 
+// Penjualan sebelum pajak (DPP) dan bagian PPH untuk SATU baris barang (dipakai laporan per barang dan modal detail).
+// Faktur: sesuai centang kena PPN per baris; POS: dibagi proporsional. PPH (laporan saja, INAPROC) dibagi ke tiap baris sebanding nilainya;
+// faktur lama yang PPH-nya sudah di dalam harga tidak dipotong lagi.
+function lineCalc(l) {
+  let rev;
+  if (l.kind === 'POS') rev = l.subtotal > 0 ? l.total * (l.stotal - l.tax - l.pph) / l.subtotal : l.total;
+  else {
+    const ri = (l.tax_mode === 'INCLUDE' && l.ppn_on ? l.tax_rate : 0) + (l.pph_mode === 'INCLUDE' && l.pph_on ? l.pph_rate : 0);
+    rev = l.total / (1 + ri / 100);
+  }
+  const pphShare = l.kind !== 'POS' && (!l.pph_mode || l.pph_mode === 'NONE') && l.subtotal > 0 ? l.pph * l.total / l.subtotal : 0;
+  return { rev, pphShare };
+}
+
 const REPORTS = {
   sales_detail: {
     title: 'Rincian Transaksi Penjualan', ranged: true,
@@ -23,7 +37,7 @@ const REPORTS = {
       C('subtotal', 'Subtotal', 'money', true), C('tax', 'PPN', 'money', true), C('pph', 'PPH', 'money', true), C('total', 'Total', 'money', true), C('paid', 'Dibayar', 'money', true), C('hpp', 'HPP', 'money', true), C('profit_pre', 'Laba Sebelum PPH', 'money', true), C('profit', 'Laba Setelah PPH', 'money', true)]; },
     // Laba Sebelum PPH = total - PPN - HPP (= subtotal - HPP); Laba Setelah PPH = Laba Sebelum PPH - PPH. Kolom lama: total - PPN - PPH - HPP (harga dasar saat transaksi, tersimpan di sale_items.cost). Transaksi batal tampil dengan angka 0.
     async run(q, r, sid) {
-      const rows = await db.query(`SELECT s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.pay_type, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
+      const rows = await db.query(`SELECT s.id, s.sale_no, s.created_at, s.kind, u.name AS cashier, c.name AS customer, s.contract_no, s.pay_type, s.method, s.status, s.subtotal, s.tax, s.pph, s.total, s.paid,
         (SELECT COALESCE(SUM(i.cost * i.qty), 0) FROM sale_items i WHERE i.sale_id = s.id) AS hpp
         FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.store_id = ? AND s.created_at >= ? AND s.created_at < ? ORDER BY s.created_at DESC, s.id DESC`, [sid, r.f, r.t]);
       return rows.map((x) => (x.status === 'VOID'
@@ -52,15 +66,8 @@ const REPORTS = {
         FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE ${DONE} AND s.created_at >= ? AND s.created_at < ?`, [sid, r.f, r.t]);
       const g = new Map();
       for (const l of lines) {
-        let rev;
-        if (l.kind === 'POS') rev = l.subtotal > 0 ? l.total * (l.stotal - l.tax - l.pph) / l.subtotal : l.total;
-        else {
-          const ri = (l.tax_mode === 'INCLUDE' && l.ppn_on ? l.tax_rate : 0) + (l.pph_mode === 'INCLUDE' && l.pph_on ? l.pph_rate : 0);
-          rev = l.total / (1 + ri / 100);
-        }
+        const { rev, pphShare } = lineCalc(l);
         const k = l.product_id + '|' + l.sku + '|' + l.name + '|' + l.unit;
-        // PPH (laporan saja, INAPROC) dibagi ke tiap baris sebanding nilainya; faktur lama yang PPH-nya sudah di dalam harga tidak dipotong lagi
-        const pphShare = l.kind !== 'POS' && (!l.pph_mode || l.pph_mode === 'NONE') && l.subtotal > 0 ? l.pph * l.total / l.subtotal : 0;
         const x = g.get(k) || { sku: l.sku, name: l.name, unit: l.unit, qty: 0, gross: 0, revenue: 0, cost: 0, pph: 0 };
         x.qty += l.qty; x.gross += l.total; x.revenue += rev; x.cost += l.cost * l.qty; x.pph += pphShare; g.set(k, x);
       }
@@ -125,6 +132,21 @@ function meta(req) {
 }
 const colsOf = (rep, req) => (typeof rep.cols === 'function' ? rep.cols(req.store.code) : rep.cols);
 router.get('/', (req, res) => res.json(Object.entries(REPORTS).map(([id, r]) => ({ id, title: r.title, ranged: !!r.ranged, category: id === 'stock' || id === 'low_stock' }))));
+// Laba per barang untuk satu transaksi (modal detail di laporan rincian). Total laba memakai angka tingkat transaksi, sama dengan baris laporan.
+router.get('/sale-profit/:id(\\d+)', wrap(async (req, res) => {
+  const s = await db.one('SELECT id, status, total, tax, pph FROM sales WHERE id = ? AND store_id = ?', [req.params.id, req.sid]);
+  if (!s) throw err(404, 'Transaksi tidak ditemukan');
+  const rows = await db.query(`SELECT i.id, i.qty, i.total, i.cost, i.ppn_on, i.pph_on, s.kind, s.subtotal, s.total AS stotal, s.tax, s.pph, s.tax_mode, s.tax_rate, s.pph_mode, s.pph_rate
+    FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.id = ? ORDER BY i.id`, [s.id]);
+  const void_ = s.status === 'VOID'; let hpp = 0;
+  const items = rows.map((l) => {
+    const c = lineCalc(l); const cost = l.cost * l.qty; hpp += cost;
+    return { id: l.id, cost: void_ ? 0 : round2(cost), profit_pre: void_ ? 0 : round2(c.rev - cost), profit: void_ ? 0 : round2(c.rev - cost - c.pphShare) };
+  });
+  hpp = void_ ? 0 : round2(hpp);
+  res.json({ items, sale: { hpp, profit_pre: void_ ? 0 : round2(s.total - s.tax - hpp), profit: void_ ? 0 : round2(s.total - s.tax - s.pph - hpp) } });
+}));
+
 router.get('/:name', wrap(async (req, res) => {
   const rep = meta(req); const r = range(req.query);
   res.json({ title: rep.title, cols: colsOf(rep, req), rows: await rep.run(req.query, r, req.sid), from: r.from, to: r.to, ranged: !!rep.ranged });

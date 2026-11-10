@@ -33,7 +33,7 @@
   const KIND = { INAPROC: ['INAPROC', 'blue'], SP: ['SP', 'yellow'], LANGSUNG: ['Langsung', 'green'] };
   A.kindTag = (k) => (KIND[k] ? A.tag(KIND[k][0], KIND[k][1]) : '');
   A.route('invoices', { title: 'Penjualan Faktur', render: (el) => A.list(el, {
-    title: 'Penjualan Faktur', sub: 'Penjualan INAPROC, SP, dan Langsung ke perusahaan/instansi di luar POS. Stok tetap berkurang dan tercatat di laporan serta piutang.', initial: { from: new Date().getFullYear() + '-01-01', to: today, kind: 'FAKTUR' },
+    title: 'Penjualan Faktur', sub: 'Penjualan INAPROC, SP, dan Langsung ke perusahaan/instansi di luar POS. Stok tetap berkurang dan tercatat di laporan serta piutang.', initial: { from: POS.yearStart(), to: today, kind: 'FAKTUR' },
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. dokumen / pelanggan', grow: true }, { name: 'kind', label: 'Jenis', type: 'select', options: [['FAKTUR', 'Semua jenis'], ...[['INAPROC', 'INAPROC'], ['SP', 'SP'], ['LANGSUNG', 'Langsung']].filter(([k]) => (A.ST.faktur_types || ['INAPROC', 'SP', 'LANGSUNG']).includes(k))] }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
     actions: '<a href="#/invoice/new"><button class="primary">Buat penjualan faktur</button></a>',
     url: (q) => '/api/sales?' + POS.qs({ ...q, kind: q.kind || 'FAKTUR' }),

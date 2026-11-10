@@ -9,7 +9,7 @@
 
   // ================= Penjualan =================
   A.route('sales', { title: 'Penjualan', render: (el) => A.list(el, {
-    title: 'Penjualan', sub: 'Riwayat transaksi kasir, piutang, dan dokumen', initial: { from: today, to: today },
+    title: 'Penjualan', sub: 'Riwayat transaksi kasir, piutang, dan dokumen', initial: { from: POS.yearStart(), to: today },
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. transaksi / pelanggan', grow: true }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['DONE', 'Selesai'], ['VOID', 'Batal']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
     actions: '<button data-act="export">Ekspor Excel</button>',
     url: (q) => '/api/sales?' + POS.qs(q),
@@ -17,13 +17,17 @@
     onRow: (r, reload) => saleDetail(r.id, reload),
     onAct: (act, r, reload, b) => { if (act === 'export') { const q = b.closest('#view'); A.download(`/api/reports/sales_detail/excel?from=${$('[data-f=from]', q).value}&to=${$('[data-f=to]', q).value}`); } else saleDetail(r.id, reload); },
   }) });
-  async function saleDetail(id, reload) {
+  // opts.profit (laporan rincian, owner): tambah kolom HPP dan laba per barang
+  async function saleDetail(id, reload, opts = {}) {
     const s = await POS.get('/api/sales/' + id);
+    const pf = opts.profit ? await POS.get('/api/reports/sale-profit/' + id) : null; const pm = pf ? new Map(pf.items.map((x) => [x.id, x])) : null;
+    const pc = (v) => `<span style="color:var(${v < 0 ? '--red' : '--green'})">${money(v)}</span>`;
     if (s.kind !== 'POS') { s.taxLabel = `PPN ${s.tax_rate}%${s.tax_mode === 'INCLUDE' ? ' (termasuk)' : ''}`; }
     const TAXM = { NONE: 'Tanpa pajak', EXCLUDE: 'Pajak ditambahkan', INCLUDE: 'Harga sudah termasuk pajak' };
     const m = A.dialog('Penjualan ' + s.sale_no, `${info([['Jenis', s.kind === 'POS' ? '' : { INAPROC: 'Penjualan INAPROC', SP: 'Penjualan SP', LANGSUNG: 'Penjualan Langsung' }[s.kind]], ['No. Kontrak / SP', s.contract_no && esc(s.contract_no)], ['Tanggal Kontrak / SP', s.contract_date && POS.d(s.contract_date)], ['PPN', s.kind !== 'POS' ? esc(TAXM[s.tax_mode] || '') + (s.tax_mode && s.tax_mode !== 'NONE' ? ' ' + s.tax_rate + '%' : '') : ''], ['UP / LS', s.pay_type && esc(s.pay_type)], ['Waktu', POS.dt(s.created_at)], ['Kasir', esc(s.cashier)], ['Pelanggan', esc(s.customer_name || 'Umum')], ['Metode', esc(POS.METHOD[s.method])], ['Jatuh tempo', s.due_date && POS.d(s.due_date)], ['Status', A.statusTag(s.status) + ' ' + A.payTag(s)]])}
-      ${A.table([{ h: 'Barang', f: (i) => esc(i.name) + (s.kind !== 'POS' && s.tax_mode && s.tax_mode !== 'NONE' && i.ppn_on === 0 ? ' <span class="muted" style="font-size:11.5px">(bebas PPN)</span>' : '') }, { h: 'Qty', cls: 'r mono', f: (i) => nf(i.qty) + ' ' + esc(i.unit || '') }, { h: 'Harga', cls: 'r mono', f: (i) => money(i.price) }, { h: 'Jumlah', cls: 'r mono', f: (i) => money(i.total) }], s.items)}
+      ${A.table([{ h: 'Barang', f: (i) => esc(i.name) + (s.kind !== 'POS' && s.tax_mode && s.tax_mode !== 'NONE' && i.ppn_on === 0 ? ' <span class="muted" style="font-size:11.5px">(bebas PPN)</span>' : '') }, { h: 'Qty', cls: 'r mono', f: (i) => nf(i.qty) + ' ' + esc(i.unit || '') }, { h: 'Harga', cls: 'r mono', f: (i) => money(i.price) }, { h: 'Jumlah', cls: 'r mono', f: (i) => money(i.total) }, ...(pm ? [{ h: 'HPP', cls: 'r mono', f: (i) => money(pm.get(i.id).cost) }, { h: 'Laba Sebelum PPH', cls: 'r mono', f: (i) => pc(pm.get(i.id).profit_pre) }, { h: 'Laba Setelah PPH', cls: 'r mono', f: (i) => pc(pm.get(i.id).profit) }] : [])], s.items)}
       <div style="margin-top:12px">${totalsBox(s)}</div>
+      ${pf ? `<div class="tot" style="margin-top:10px"><div><span>HPP</span><span class="mono">${money(pf.sale.hpp)}</span></div><div><span>Laba sebelum PPH</span><span class="mono">${pc(pf.sale.profit_pre)}</span></div>${s.pph ? `<div><span>PPH (laporan)</span><span class="mono">${money(s.pph)}</span></div>` : ''}<div class="g"><span>Laba setelah PPH</span><span class="mono">${pc(pf.sale.profit)}</span></div></div>` : ''}
       ${s.payments.length ? `<h3 style="margin:14px 0 6px;font-size:14px">Pembayaran</h3>${A.table([{ h: 'Waktu', f: (p) => POS.dt(p.created_at) }, { h: 'Metode', f: (p) => esc(p.method) }, { h: 'Catatan', f: (p) => esc(p.note || '') }, { h: 'Nominal', cls: 'r mono', f: (p) => money(p.amount) }], s.payments)}` : ''}`,
       { footer: `${s.kind !== 'POS' ? '' : '<button data-r>Cetak struk</button>'}${s.status === 'DONE' ? docBtns('sale', s.id, s.outstanding) : ''}<span style="flex:1"></span>${s.status === 'DONE' && s.outstanding > 0 ? '<button class="primary" data-pay>Terima pembayaran</button>' : ''}${s.status === 'DONE' ? '<button class="danger" data-void>Batalkan</button>' : ''}<button data-x>Tutup</button>` });
     bindDocs(m, 'sale', s.id);
@@ -41,6 +45,7 @@
   // ================= Pembelian =================
   A.route('purchases', { title: 'Pembelian', render: async (el) => { const sup = (await POS.get('/api/suppliers?limit=500')).rows; return A.list(el, {
     title: 'Pembelian', sub: 'Pesanan ke pemasok, hutang, dan dokumen pembayaran', actions: '<a href="#/purchase/new"><button class="primary">Pembelian baru</button></a>',
+    initial: { from: POS.yearStart(), to: today },
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. / pemasok / faktur', grow: true }, { name: 'supplier_id', label: 'Pemasok', type: 'select', options: [['', 'Semua'], ...sup.map((s) => [s.id, s.name])] }, { name: 'status', label: 'Status', type: 'select', options: [['', 'Semua'], ['OPEN', 'Menunggu'], ['PARTIAL', 'Sebagian'], ['RECEIVED', 'Diterima'], ['CANCELLED', 'Dibatalkan']] }, { name: 'unpaid', label: 'Filter', type: 'check', text: 'Belum lunas' }],
     url: (q) => '/api/purchases?' + POS.qs(q),
     cols: [{ h: 'No', f: (r) => `<span class="mono">${esc(r.po_no)}</span>` }, { h: 'Tanggal', f: (r) => POS.d(r.date) }, { h: 'Pemasok', f: (r) => esc(r.supplier_name) + (r.supplier_ref ? `<div class="muted" style="font-size:12px">Faktur ${esc(r.supplier_ref)}</div>` : '') }, { h: 'Jatuh tempo', f: (r) => POS.d(r.due_date) }, { h: 'Total', cls: 'r mono', f: (r) => money(r.total) }, { h: 'Sisa hutang', cls: 'r mono', f: (r) => (r.status === 'CANCELLED' ? '' : money(r.total - r.paid)) }, { h: 'Status', f: (r) => A.statusTag(r.status) + ' ' + A.payTag(r) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
@@ -88,6 +93,7 @@
   // ================= Penerimaan =================
   A.route('receipts', { title: 'Penerimaan', render: (el) => A.list(el, {
     title: 'Penerimaan barang', sub: 'Stok langsung bertambah saat disimpan, tanpa persetujuan', actions: '<a href="#/receipt/new"><button class="primary">Penerimaan baru</button></a>',
+    initial: { from: POS.yearStart(), to: today },
     filters: [{ name: 'from', label: 'Dari', type: 'date' }, { name: 'to', label: 'Sampai', type: 'date' }, { name: 'q', label: 'Cari', placeholder: 'No. / pemasok / SJ', grow: true }],
     url: (q) => '/api/receipts?' + POS.qs(q),
     cols: [{ h: 'No', f: (r) => `<span class="mono">${esc(r.gr_no)}</span>` }, { h: 'Tanggal', f: (r) => POS.d(r.date) }, { h: 'Pemasok', f: (r) => esc(r.supplier_name) }, { h: 'No. pembelian', f: (r) => `<span class="mono">${esc(r.po_no)}</span>` }, { h: 'SJ pemasok', f: (r) => esc(r.supplier_do || '') }, { h: 'Status', f: (r) => A.statusTag(r.status) }, { h: '', cls: 'r', f: () => A.btn('view', 'Detail') }],
@@ -182,7 +188,7 @@
   const MT = { OPENING: 'Stok awal', SALE: 'Penjualan', SALE_VOID: 'Batal jual', SALE_EDIT: 'Ubah jual', RECEIPT: 'Penerimaan', RECEIPT_VOID: 'Batal terima', OPNAME: 'Opname', ADJUST: 'Penyesuaian' };
   A.route('stockcard', { title: 'Kartu Stok', async render(el) {
     let prod = null; try { prod = JSON.parse(sessionStorage.getItem('stockcard.product') || 'null'); } catch (_) {}
-    const d30 = new Date(); d30.setDate(d30.getDate() - 30); const from0 = POS.today.call ? `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, '0')}-${String(d30.getDate()).padStart(2, '0')}` : today;
+    const from0 = POS.yearStart();
     el.innerHTML = A.head('Kartu stok', 'Riwayat keluar-masuk barang beserta saldo', '<button id="k_adj" disabled>Penyesuaian stok</button>') + `<div class="bar"><div class="grow"><label class="f">Barang</label><button id="k_pick" style="width:100%;text-align:left"></button></div><div><label class="f">Dari</label><input type="date" id="k_from" value="${from0}"></div><div><label class="f">Sampai</label><input type="date" id="k_to" value="${today}"></div></div><div class="tablewrap" id="k_tw"><div class="empty">Pilih barang untuk melihat kartu stok</div></div>`;
     const setBtn = () => { $('#k_pick', el).textContent = prod ? prod.name : 'Klik untuk memilih barang'; $('#k_adj', el).disabled = !prod; };
     async function load() {
@@ -200,8 +206,8 @@
   // ================= Laporan =================
   A.route('reports', { title: 'Laporan', async render(el) {
     const list = await POS.get('/api/reports'); let cur = list[0];
-    const from0 = `${new Date().getFullYear()}-01-01`; // default: awal tahun sampai hari ini
-    el.innerHTML = A.head('Laporan & Excel', 'Pilih laporan, atur periode, lalu tampilkan atau unduh sebagai Excel') + `<div class="bar"><div class="grow"><label class="f">Laporan</label><select id="rp_sel">${list.map((r) => `<option value="${r.id}">${esc(r.title)}</option>`).join('')}</select></div><div id="rp_dates" style="display:flex;gap:10px"><div><label class="f">Dari</label><input type="date" id="rp_from" value="${from0}"></div><div><label class="f">Sampai</label><input type="date" id="rp_to" value="${today}"></div></div><div><button class="primary" id="rp_go">Tampilkan</button> <button id="rp_xl">Unduh Excel</button></div></div><div class="tablewrap" id="rp_tw"><div class="empty">Pilih laporan lalu klik Tampilkan</div></div>`;
+    const from0 = POS.yearStart(); // default: awal tahun sampai hari ini
+    el.innerHTML = A.head('Laporan & Excel', 'Pilih laporan, atur periode, lalu tampilkan atau unduh sebagai Excel. Di Rincian Transaksi Penjualan, klik dua kali baris untuk melihat detail dan laba per barang.') + `<div class="bar"><div class="grow"><label class="f">Laporan</label><select id="rp_sel">${list.map((r) => `<option value="${r.id}">${esc(r.title)}</option>`).join('')}</select></div><div id="rp_dates" style="display:flex;gap:10px"><div><label class="f">Dari</label><input type="date" id="rp_from" value="${from0}"></div><div><label class="f">Sampai</label><input type="date" id="rp_to" value="${today}"></div></div><div><button class="primary" id="rp_go">Tampilkan</button> <button id="rp_xl">Unduh Excel</button></div></div><div class="tablewrap" id="rp_tw"><div class="empty">Pilih laporan lalu klik Tampilkan</div></div>`;
     const fmt = { money: (v) => money(v), int: (v) => nf(v), qty: (v) => nf(v), date: (v) => POS.d(v), datetime: (v) => POS.dt(v), text: (v) => esc(v ?? '') };
     const qs = () => `from=${$('#rp_from', el).value}&to=${$('#rp_to', el).value}`;
     const sync = () => { cur = list.find((r) => r.id === $('#rp_sel', el).value); $('#rp_dates', el).style.display = cur.ranged ? 'flex' : 'none'; };
@@ -213,6 +219,9 @@
       let html = A.table(tcols, r.rows, { empty: 'Tidak ada data pada periode ini' });
       if (r.rows.length && sums.some((s) => s != null)) html = html.replace('</tbody>', `<tr style="font-weight:600;background:var(--bg)">${r.cols.map((c, i) => `<td class="${['money', 'int', 'qty'].includes(c.type) ? 'r mono' : ''}">${i === 0 ? 'TOTAL' : sums[i] != null ? fmt[c.type](sums[i]) : ''}</td>`).join('')}</tr></tbody>`);
       $('#rp_tw', el).innerHTML = `<div style="padding:12px 16px;border-bottom:1px solid var(--line)"><b>${esc(r.title)}</b> <span class="muted">${r.ranged ? POS.d(r.from) + ' - ' + POS.d(r.to) : 'per ' + POS.d(today)} &middot; ${r.rows.length} baris</span></div>` + html;
+      if (cur.id === 'sales_detail') { // klik dua kali baris: detail transaksi + laba per barang
+        $$('#rp_tw tbody tr', el).forEach((tr, i) => { const row = r.rows[i]; if (!row || !row.id) return; tr.style.cursor = 'pointer'; tr.title = 'Klik dua kali untuk detail dan laba per barang'; tr.addEventListener('dblclick', () => A.guard(() => saleDetail(row.id, () => $('#rp_go', el).click(), { profit: true }))); });
+      }
     });
     $('#rp_xl', el).onclick = () => A.download(`/api/reports/${cur.id}/excel?${qs()}`);
   } });
